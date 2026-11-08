@@ -200,6 +200,9 @@ const messages: LocaleMessages = {
     ResetPasswordNotAvailableMsg: "Password reset is not available, please contact the administrator",
     PasswordResetMailSubjectMsg: "Your Free Temp Mail password was reset",
     PasswordResetMailContentMsg: "The password of your Free Temp Mail account was just reset, and all devices have been signed out. If this was not you, reset your password again and contact the administrator.",
+    AddressCredentialLoginDisabledMsg: "Credential login is turned off for this address, please open it from your account",
+    DeleteAccountConfirmMismatchMsg: "The email you typed does not match this account",
+    DeleteAccountPersonalAddressActionRequiredMsg: "Choose whether to delete or transfer each personal mailbox first",
 }
 
 export default messages;

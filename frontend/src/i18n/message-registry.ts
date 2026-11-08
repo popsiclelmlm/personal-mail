@@ -474,6 +474,10 @@ export const MESSAGE_REGISTRY = {
     }
   },
   "views.user.UserMailBox": {
+    "unreadOnly": {
+      "en": "Unread only",
+      "zh": "只看未读"
+    },
     "addressQueryTip": {
       "en": "Leave blank to query all addresses",
       "zh": "留空查询所有地址"
@@ -540,6 +544,54 @@ export const MESSAGE_REGISTRY = {
     }
   },
   "views.user.UserSettings": {
+    "addressQuota": {
+      "en": "Addresses",
+      "zh": "地址"
+    },
+    "personalQuota": {
+      "en": "Personal mailboxes",
+      "zh": "个人邮箱"
+    },
+    "deleteAccount": {
+      "en": "Delete account",
+      "zh": "注销账号"
+    },
+    "deleteAccountTip": {
+      "en": "Your account, passkeys and the addresses below will be deleted. This cannot be undone.",
+      "zh": "账号、通行密钥和下面的地址都会被删除，无法恢复。"
+    },
+    "personalMailboxes": {
+      "en": "Personal mailboxes: delete or transfer each one",
+      "zh": "个人邮箱：逐个选择删除或转移"
+    },
+    "deleteIt": {
+      "en": "Delete with its mail",
+      "zh": "连同邮件删除"
+    },
+    "transferIt": {
+      "en": "Transfer to another user",
+      "zh": "转移给其他用户"
+    },
+    "transferTarget": {
+      "en": "Email of the receiving account",
+      "zh": "接收方的账号邮箱"
+    },
+    "otherAddressesDeleted": {
+      "en": "{count} other addresses will be deleted together with their mail.",
+      "zh": "另外 {count} 个地址会连同邮件一起删除。"
+    },
+    "typeEmailToConfirm": {
+      "en": "Type {email} to confirm",
+      "zh": "输入 {email} 确认"
+    },
+    "currentPassword": {
+      "en": "Current password",
+      "zh": "当前密码"
+    },
+    "cancel": {
+      "en": "Cancel",
+      "zh": "取消"
+    },
     "logoutAll": {
       "en": "Sign out of all devices",
       "zh": "退出所有设备"
@@ -1212,6 +1264,70 @@ export const MESSAGE_REGISTRY = {
     }
   },
   "views.user.AddressManagement": {
+    "personalMailbox": {
+      "en": "Personal",
+      "zh": "个人"
+    },
+    "retentionDaysLeft": {
+      "en": "{days} days left",
+      "zh": "剩 {days} 天"
+    },
+    "more": {
+      "en": "More",
+      "zh": "更多"
+    },
+    "makePersonal": {
+      "en": "Make personal mailbox",
+      "zh": "设为个人邮箱"
+    },
+    "keep30Days": {
+      "en": "Keep for 30 days",
+      "zh": "保留 30 天"
+    },
+    "makeTemporary": {
+      "en": "Make temporary",
+      "zh": "改回临时"
+    },
+    "resetCredential": {
+      "en": "Reset credential",
+      "zh": "重置邮箱凭证"
+    },
+    "enableCredentialLogin": {
+      "en": "Allow credential login",
+      "zh": "允许凭证登录"
+    },
+    "disableCredentialLogin": {
+      "en": "Turn off credential login",
+      "zh": "关闭凭证登录"
+    },
+    "confirmTitle": {
+      "en": "Please confirm",
+      "zh": "请确认"
+    },
+    "confirm": {
+      "en": "Confirm",
+      "zh": "确认"
+    },
+    "cancel": {
+      "en": "Cancel",
+      "zh": "取消"
+    },
+    "permanentConfirm": {
+      "en": "{address} becomes a personal mailbox: it is never cleaned up and can only be opened from your account (credential login is turned off; you can allow it again later).",
+      "zh": "{address} 将成为个人邮箱：永不自动清理，并且只能通过账号打开（会关闭邮箱凭证登录，之后可以再打开）。"
+    },
+    "temporaryConfirm": {
+      "en": "{address} becomes a temporary mailbox and may be cleaned up after one day.",
+      "zh": "{address} 将改回临时邮箱，一天后可能被自动清理。"
+    },
+    "resetCredentialConfirm": {
+      "en": "All existing credentials of {address}, including Telegram bindings, stop working immediately.",
+      "zh": "{address} 现有的所有邮箱凭证（包括 Telegram 绑定）立即失效。"
+    },
+    "disableCredentialLoginConfirm": {
+      "en": "{address} can then only be opened from your account; existing credentials stop working elsewhere.",
+      "zh": "之后 {address} 只能通过账号打开，在别处使用的邮箱凭证都会失效。"
+    },
     "actions": {
       "en": "Actions",
       "zh": "操作"

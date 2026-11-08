@@ -200,6 +200,9 @@ const messages: LocaleMessages = {
     ResetPasswordNotAvailableMsg: "暂不支持重设密码，请联系管理员",
     PasswordResetMailSubjectMsg: "你的 Free Temp Mail 密码已重设",
     PasswordResetMailContentMsg: "你的 Free Temp Mail 账号密码刚刚被重设，所有设备都已退出登录。如果不是你本人操作，请立即再次重设密码并联系管理员。",
+    AddressCredentialLoginDisabledMsg: "这个地址已关闭邮箱凭证登录，请登录账号后访问",
+    DeleteAccountConfirmMismatchMsg: "输入的邮箱和当前账号不一致",
+    DeleteAccountPersonalAddressActionRequiredMsg: "请先为每个个人邮箱选择删除或转移",
 }
 
 export default messages;

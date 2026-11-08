@@ -398,7 +398,180 @@ const phase2 = async () => {
     return { email, password: 'pw-new' };
 };
 
-const phases = { phase1, phase2 };
+const decodeJwt = (token) => JSON.parse(Buffer.from(token.split('.')[1], 'base64url'));
+
+const phase3 = async () => {
+    console.log('phase 3: personal mailboxes');
+    const email = `owner${RUN_ID}@example.test`;
+    await adminCreateUser(email, 'owner-pw', 'member');
+    let token = (await login(email, 'owner-pw')).data.jwt;
+
+    // 建一个个人邮箱域名的地址和一个临时地址，都绑定到账号
+    const personal = await createAddress(`pm${RUN_ID}`, 'personal.test', { token });
+    const temp = await createAddress(`pt${RUN_ID}`, 'temp.test', { token });
+    await bindAddress(token, personal.data.jwt);
+    await bindAddress(token, temp.data.jwt);
+    const plainJwt = personal.data.jwt;
+    check('new address credentials carry cv', decodeJwt(plainJwt).cv === 0, decodeJwt(plainJwt));
+    check('plain credential works before the upgrade', (await call('GET', '/api/settings', { headers: addressHeaders(plainJwt) })).status === 200);
+
+    // 升级为个人邮箱：默认关闭邮箱凭证登录
+    const upgrade = await call('POST', '/user_api/bind_address/retention', {
+        body: { address_id: personal.data.address_id, retention_type: 'permanent' }, headers: userHeaders(token),
+    });
+    check('upgrade to personal mailbox', upgrade.status === 200, upgrade);
+    const plainAfter = await call('GET', '/api/settings', { headers: addressHeaders(plainJwt) });
+    check('plain credential is refused for a personal mailbox', plainAfter.status === 401, plainAfter.status);
+    const pwLogin = await call('POST', '/api/address_login', {
+        body: { email: personal.data.address, password: sha256(personal.data.password || 'x') },
+    });
+    check('address password login is refused for a personal mailbox', pwLogin.status === 403, pwLogin);
+    const accountJwtRes = await call('GET', `/user_api/bind_address_jwt/${personal.data.address_id}`, { headers: userHeaders(token) });
+    const accountJwt = accountJwtRes.data.jwt;
+    const accountPayload = decodeJwt(accountJwt);
+    check('account credential carries cv, uid and utv', accountPayload.cv === 0 && typeof accountPayload.uid === 'number'
+        && accountPayload.utv === 0, accountPayload);
+    check('account credential opens the personal mailbox', (await call('GET', '/api/settings', { headers: addressHeaders(accountJwt) })).status === 200);
+    const rebind = await call('POST', '/user_api/bind_address', { headers: { ...userHeaders(token), ...addressHeaders(plainJwt) } });
+    check('a plain credential cannot bind a personal mailbox', rebind.status === 401, rebind.status);
+
+    // 打开、关闭邮箱凭证登录
+    const enable = await call('POST', `/user_api/address/${personal.data.address_id}/credential_login`, {
+        body: { enabled: true }, headers: userHeaders(token),
+    });
+    const plainEnabled = await call('GET', '/api/settings', { headers: addressHeaders(plainJwt) });
+    check('allowing credential login makes the plain credential work again', enable.status === 200 && plainEnabled.status === 200, [enable.status, plainEnabled.status]);
+    await call('POST', `/user_api/address/${personal.data.address_id}/credential_login`, { body: { enabled: false }, headers: userHeaders(token) });
+    check('turning it off refuses the plain credential again', (await call('GET', '/api/settings', { headers: addressHeaders(plainJwt) })).status === 401);
+    const notOwner = await call('POST', `/user_api/address/${personal.data.address_id + 100000}/credential_login`, { body: { enabled: true }, headers: userHeaders(token) });
+    check('cannot change credential login of an address that is not bound', notOwner.status === 400, notOwner.status);
+
+    // 重置邮箱凭证
+    const reset = await call('POST', `/user_api/address/${personal.data.address_id}/reset_credential`, { headers: userHeaders(token) });
+    check('reset credential returns a new credential', reset.status === 200 && decodeJwt(reset.data.jwt).cv === 1, reset.data);
+    check('old account credential is revoked after reset', (await call('GET', '/api/settings', { headers: addressHeaders(accountJwt) })).status === 401);
+    check('new credential works after reset', (await call('GET', '/api/settings', { headers: addressHeaders(reset.data.jwt) })).status === 200);
+    await call('POST', `/user_api/address/${personal.data.address_id}/credential_login`, { body: { enabled: true }, headers: userHeaders(token) });
+    check('old plain credential stays revoked even with credential login allowed', (await call('GET', '/api/settings', { headers: addressHeaders(plainJwt) })).status === 401);
+    await call('POST', `/user_api/address/${personal.data.address_id}/credential_login`, { body: { enabled: false }, headers: userHeaders(token) });
+
+    // 统一收件箱
+    await receiveMail(personal.data.address, `p1 ${RUN_ID}`);
+    await receiveMail(personal.data.address, `p2 ${RUN_ID}`);
+    await receiveMail(temp.data.address, `t1 ${RUN_ID}`);
+    const counts = await call('GET', '/user_api/mails/unread_counts', { headers: userHeaders(token) });
+    const countOf = (data, id) => data.results.find((row) => row.address_id === id)?.unread_count;
+    check('unread counts per address', counts.status === 200 && countOf(counts.data, personal.data.address_id) === 2
+        && countOf(counts.data, temp.data.address_id) === 1 && counts.data.total_unread === 3, counts.data);
+    check('personal mailboxes are listed first', counts.data.results[0]?.address_id === personal.data.address_id, counts.data.results);
+    const byAddress = await call('GET', `/user_api/mails?limit=20&offset=0&address_id=${personal.data.address_id}`, { headers: userHeaders(token) });
+    check('inbox filters by address id', byAddress.data.results.length === 2
+        && byAddress.data.results.every((row) => row.address === personal.data.address), byAddress.data);
+    const markRead = await call('PATCH', `/user_api/mails/${byAddress.data.results[0].id}/read`, { body: { isUnread: false }, headers: userHeaders(token) });
+    const unread = await call('GET', '/user_api/mails?limit=20&offset=0&unread=1', { headers: userHeaders(token) });
+    check('mark read from the unified inbox and filter unread', markRead.status === 200 && unread.data.results.length === 2, [markRead.text, unread.data.results.length]);
+    const otherEmail = `other${RUN_ID}@example.test`;
+    await adminCreateUser(otherEmail, 'other-pw', 'member');
+    const otherToken = (await login(otherEmail, 'other-pw')).data.jwt;
+    const foreignRead = await call('PATCH', `/user_api/mails/${byAddress.data.results[1].id}/read`, { body: { isUnread: false }, headers: userHeaders(otherToken) });
+    const stillUnread = await call('GET', `/user_api/mails?limit=20&offset=0&unread=1&address_id=${personal.data.address_id}`, { headers: userHeaders(token) });
+    check('another user cannot change read status', foreignRead.status === 200 && stillUnread.data.results.length === 1, stillUnread.data.results.length);
+    const badFilter = await call('GET', '/user_api/mails?limit=20&offset=0&address_id=abc', { headers: userHeaders(token) });
+    check('invalid address id filter is rejected', badFilter.status === 400, badFilter.status);
+
+    // 发信：个人邮箱按角色额度可以发，临时地址不能发
+    const sendSettings = await call('GET', `/user_api/address/${personal.data.address_id}/settings`, { headers: userHeaders(token) });
+    check('personal mailbox gets the role send balance', sendSettings.data.send_balance === 5, sendSettings.data);
+    const sinkBefore = (await sinkMessages()).length;
+    const sent = await call('POST', `/user_api/address/${personal.data.address_id}/send_mail`, {
+        body: { from_name: 'Me', to_mail: `friend${RUN_ID}@outside.test`, to_name: '', subject: `hi ${RUN_ID}`, content: 'hello', is_html: false },
+        headers: userHeaders(token),
+    });
+    check('personal mailbox sends mail', sent.status === 200, sent);
+    await sleep(500);
+    const delivered = (await sinkMessages()).slice(sinkBefore).find((item) => item.to.includes(`friend${RUN_ID}@outside.test`));
+    check('mail reaches the SMTP server', !!delivered && delivered.from === personal.data.address, delivered);
+    const sendbox = await call('GET', `/user_api/sendbox?limit=10&offset=0&address=${encodeURIComponent(personal.data.address)}`, { headers: userHeaders(token) });
+    check('sent mail is in the user sendbox', sendbox.status === 200 && sendbox.data.results.length === 1, sendbox.data);
+    const balanceAfter = await call('GET', `/user_api/address/${personal.data.address_id}/settings`, { headers: userHeaders(token) });
+    check('send balance decreases', balanceAfter.data.send_balance === 4, balanceAfter.data);
+    const tempSend = await call('POST', `/user_api/address/${temp.data.address_id}/send_mail`, {
+        body: { from_name: '', to_mail: `friend${RUN_ID}@outside.test`, to_name: '', subject: 'x', content: 'x', is_html: false },
+        headers: userHeaders(token),
+    });
+    check('temporary address cannot send', tempSend.status === 400, tempSend);
+
+    // 匿名和登录用户的临时邮箱不受影响
+    const anon = await createAddress(`pa${RUN_ID}`, 'temp.test');
+    await receiveMail(anon.data.address, `anon ${RUN_ID}`);
+    const anonMails = await call('GET', '/api/mails?limit=10&offset=0', { headers: addressHeaders(anon.data.jwt) });
+    check('anonymous temp mailbox still receives and reads mail', anon.status === 200 && anonMails.data.results.length === 1, anonMails.data);
+    const tempMails = await call('GET', '/api/mails?limit=10&offset=0', { headers: addressHeaders(temp.data.jwt) });
+    check('bound temp mailbox still works with its plain credential', tempMails.status === 200 && tempMails.data.results.length === 1, tempMails.status);
+
+    // 退出所有设备后，账号取得的个人邮箱凭证也失效
+    const currentAccountJwt = (await call('GET', `/user_api/bind_address_jwt/${personal.data.address_id}`, { headers: userHeaders(token) })).data.jwt;
+    await call('POST', '/user_api/logout_all', { headers: userHeaders(token) });
+    check('logout_all revokes account credentials of personal mailboxes', (await call('GET', '/api/settings', { headers: addressHeaders(currentAccountJwt) })).status === 401);
+    token = (await login(email, 'owner-pw')).data.jwt;
+
+    // 转移个人邮箱：保留期和凭证开关保留，占用对方的永久额度
+    const noRoleEmail = `norole${RUN_ID}@example.test`;
+    await adminCreateUser(noRoleEmail, 'norole-pw', null);
+    const toNoRole = await call('POST', '/user_api/transfer_address', {
+        body: { address_id: personal.data.address_id, target_user_email: noRoleEmail }, headers: userHeaders(token),
+    });
+    check('cannot transfer a personal mailbox to a user without permanent quota', toNoRole.status === 400, toNoRole);
+    const second = await createAddress(`pm2${RUN_ID}`, 'personal.test', { token });
+    await bindAddress(token, second.data.jwt);
+    await call('POST', '/user_api/bind_address/retention', { body: { address_id: second.data.address_id, retention_type: 'permanent' }, headers: userHeaders(token) });
+    const transferred = await call('POST', '/user_api/transfer_address', {
+        body: { address_id: second.data.address_id, target_user_email: otherEmail }, headers: userHeaders(token),
+    });
+    const otherList = await call('GET', '/user_api/bind_address?limit=20&offset=0', { headers: userHeaders(otherToken) });
+    const moved = otherList.data.results.find((row) => row.name === second.data.address);
+    check('transferred personal mailbox keeps its retention and credential setting', transferred.status === 200
+        && moved?.is_permanent === 1 && moved?.retention_type === 'permanent' && moved?.credential_login_disabled === 1, moved);
+
+    // 注销账号
+    const preview = await call('GET', '/user_api/delete_account/preview', { headers: userHeaders(token) });
+    check('delete preview lists personal and other addresses', preview.status === 200
+        && preview.data.personal_addresses.map((row) => row.id).includes(personal.data.address_id)
+        && preview.data.other_addresses.map((row) => row.id).includes(temp.data.address_id)
+        && preview.data.password_required === true, preview.data);
+    const noAction = await call('POST', '/user_api/delete_account', {
+        body: { confirm_email: email, password: sha256('owner-pw') }, headers: userHeaders(token),
+    });
+    check('delete account requires a choice for each personal mailbox', noAction.status === 400
+        && noAction.data.personal_addresses?.[0]?.id === personal.data.address_id, noAction.data);
+    const wrongEmail = await call('POST', '/user_api/delete_account', {
+        body: { confirm_email: 'x@y.test', password: sha256('owner-pw'), personal_addresses: [{ address_id: personal.data.address_id, action: 'delete' }] },
+        headers: userHeaders(token),
+    });
+    check('delete account requires typing the account email', wrongEmail.status === 400, wrongEmail.text);
+    const wrongPw = await call('POST', '/user_api/delete_account', {
+        body: { confirm_email: email, password: sha256('nope'), personal_addresses: [{ address_id: personal.data.address_id, action: 'delete' }] },
+        headers: userHeaders(token),
+    });
+    check('delete account requires the password', wrongPw.status === 400, wrongPw.text);
+    const removed = await call('POST', '/user_api/delete_account', {
+        body: {
+            confirm_email: email.toUpperCase(), password: sha256('owner-pw'),
+            personal_addresses: [{ address_id: personal.data.address_id, action: 'transfer', target_user_email: otherEmail }],
+        },
+        headers: userHeaders(token),
+    });
+    check('delete account with a transfer succeeds', removed.status === 200, removed);
+    check('deleted account can no longer log in', (await login(email, 'owner-pw')).status === 400);
+    check('deleted account token is revoked', (await call('GET', '/user_api/settings', { headers: userHeaders(token) })).status === 401);
+    const otherAfter = await call('GET', '/user_api/bind_address?limit=20&offset=0', { headers: userHeaders(otherToken) });
+    check('the personal mailbox now belongs to the receiving user', otherAfter.data.results.some((row) => row.name === personal.data.address && row.is_permanent === 1), otherAfter.data.results.map((row) => row.name));
+    check('other addresses of the deleted account are removed', (await call('GET', '/api/settings', { headers: addressHeaders(temp.data.jwt) })).status === 401);
+    const otherMails = await call('GET', `/user_api/mails?limit=20&offset=0&address=${encodeURIComponent(personal.data.address)}`, { headers: userHeaders(otherToken) });
+    check('mail of the transferred mailbox moves with it', otherMails.data.results.length === 2, otherMails.data.results.length);
+};
+
+const phases = { phase1, phase2, phase3 };
 
 const main = async () => {
     const target = process.argv[2] || 'all';

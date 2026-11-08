@@ -2,7 +2,7 @@
 import { ref, h, onMounted, watch } from 'vue';
 import { useScopedI18n } from '@/i18n/app'
 import { useRouter } from 'vue-router';
-import { NBadge, NPopconfirm, NButton } from 'naive-ui'
+import { NBadge, NPopconfirm, NButton, NDropdown, NTag, NSpace, NText } from 'naive-ui'
 
 import { useGlobalState } from '../../store'
 import { api } from '../../api'
@@ -31,6 +31,98 @@ const targetUserEmail = ref('')
 const showAddressCredential = ref(false)
 const currentAddressCredential = ref('')
 const credentialAddress = ref('')
+
+const confirmAction = ref(null)
+
+// 保留期剩余天数（向上取整）；没有到期时间时返回 null
+const retentionDaysLeft = (row) => {
+    if (!row.retention_until) return null
+    const until = new Date(`${row.retention_until.replace(' ', 'T')}Z`).getTime()
+    if (!Number.isFinite(until)) return null
+    return Math.max(Math.ceil((until - Date.now()) / 86400000), 0)
+}
+
+// 个人邮箱和临时邮箱只用一个小标识区分
+const renderAddressName = (row) => {
+    const daysLeft = retentionDaysLeft(row)
+    const tags = []
+    if (row.is_permanent) {
+        tags.push(h(NTag, { size: 'small', type: 'primary', bordered: false }, { default: () => t('personalMailbox') }))
+    } else if (daysLeft !== null) {
+        tags.push(h(NText, { depth: 3 }, { default: () => t('retentionDaysLeft', { days: daysLeft }) }))
+    }
+    return h(NSpace, { size: 6, align: 'center', wrap: false }, {
+        default: () => [h('span', row.name), ...tags],
+    })
+}
+
+// 当前打开的邮箱就是这个地址时，换成账号取得的新凭证，避免关闭凭证登录或重置凭证后被踢出
+const refreshCurrentMailbox = async (row, newJwt) => {
+    if (!jwt.value) return
+    try {
+        const payload = JSON.parse(atob(jwt.value.split('.')[1].replace(/-/g, '+').replace(/_/g, '/')))
+        if (Number(payload.address_id) !== Number(row.id) && payload.address !== row.name) return
+        jwt.value = newJwt || (await api.fetch(`/user_api/bind_address_jwt/${row.id}`)).jwt
+    } catch (error) {
+        console.log(error)
+    }
+}
+
+const runAddressAction = async (key, row) => {
+    try {
+        if (key === 'permanent' || key === 'extended' || key === 'temporary') {
+            await api.fetch(`/user_api/bind_address/retention`, {
+                method: 'POST',
+                body: JSON.stringify({ address_id: row.id, retention_type: key })
+            })
+            if (key === 'permanent') await refreshCurrentMailbox(row)
+        } else if (key === 'resetCredential') {
+            const res = await api.fetch(`/user_api/address/${row.id}/reset_credential`, { method: 'POST' })
+            await refreshCurrentMailbox(row, res.jwt)
+        } else if (key === 'disableCredentialLogin' || key === 'enableCredentialLogin') {
+            await api.fetch(`/user_api/address/${row.id}/credential_login`, {
+                method: 'POST',
+                body: JSON.stringify({ enabled: key === 'enableCredentialLogin' })
+            })
+            if (key === 'disableCredentialLogin') await refreshCurrentMailbox(row)
+        }
+        message.success(t('success'))
+        await fetchData()
+    } catch (error) {
+        message.error(error.message || "error")
+    }
+}
+
+// 次要操作收进「更多」菜单；会让旧凭证失效的操作先确认
+const addressMenuOptions = (row) => [
+    !row.is_permanent && { label: t('makePersonal'), key: 'permanent' },
+    { label: t('keep30Days'), key: 'extended' },
+    (row.is_permanent || row.retention_type === 'extended') && { label: t('makeTemporary'), key: 'temporary' },
+    { type: 'divider', key: 'd1' },
+    { label: t('resetCredential'), key: 'resetCredential' },
+    row.credential_login_disabled
+        ? { label: t('enableCredentialLogin'), key: 'enableCredentialLogin' }
+        : { label: t('disableCredentialLogin'), key: 'disableCredentialLogin' },
+].filter(Boolean)
+
+const onAddressMenu = (key, row) => {
+    const confirmKeys = ['permanent', 'temporary', 'resetCredential', 'disableCredentialLogin']
+    if (confirmKeys.includes(key)) {
+        confirmAction.value = { key, row }
+        return
+    }
+    runAddressAction(key, row)
+}
+
+const confirmText = (action) => action ? t(`${action.key}Confirm`, { address: action.row.name }) : ''
+
+const closeConfirm = () => { confirmAction.value = null }
+
+const acceptConfirm = async () => {
+    const action = confirmAction.value
+    confirmAction.value = null
+    if (action) await runAddressAction(action.key, action.row)
+}
 
 const showCredential = async (row) => {
     try {
@@ -148,7 +240,8 @@ const searchData = () => {
 const columns = [
     {
         title: t('emailAddress'),
-        key: "name"
+        key: "name",
+        render: renderAddressName
     },
     {
         title: t('mail_count'),
@@ -179,7 +272,8 @@ const columns = [
         key: 'actions',
         render(row) {
             return h('div', [
-                h(NButton,
+                // 关闭了邮箱凭证登录的地址不显示凭证，避免误以为可以拿去别处登录
+                !row.credential_login_disabled && h(NButton,
                     {
                         tertiary: true,
                         type: "primary",
@@ -229,6 +323,14 @@ const columns = [
                         default: () => t('unbindAddressTip')
                     }
                 ),
+                h(NDropdown,
+                    {
+                        trigger: 'click',
+                        options: addressMenuOptions(row),
+                        onSelect: (key) => onAddressMenu(key, row)
+                    },
+                    { default: () => h(NButton, { tertiary: true }, { default: () => t('more') }) }
+                ),
             ])
         }
     }
@@ -256,6 +358,16 @@ watch([page, pageSize], async () => {
             <template #action>
                 <n-button :loading="loading" @click="transferAddress" size="small" tertiary type="error">
                     {{ t('transferAddress') }}
+                </n-button>
+            </template>
+        </n-modal>
+        <n-modal :show="!!confirmAction" preset="dialog" :title="t('confirmTitle')"
+            @update:show="(value) => { if (!value) closeConfirm() }">
+            <p>{{ confirmText(confirmAction) }}</p>
+            <template #action>
+                <n-button size="small" tertiary @click="closeConfirm">{{ t('cancel') }}</n-button>
+                <n-button :loading="loading" size="small" type="primary" @click="acceptConfirm">
+                    {{ t('confirm') }}
                 </n-button>
             </template>
         </n-modal>
@@ -287,7 +399,7 @@ watch([page, pageSize], async () => {
 
 <style scoped>
 .n-data-table {
-    min-width: 640px;
+    min-width: 760px;
 }
 
 .address-table-scroll {

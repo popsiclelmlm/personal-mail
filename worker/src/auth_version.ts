@@ -18,3 +18,23 @@ export const isVersionCurrent = (tokenVersion: unknown, currentVersion: unknown)
 // 用户令牌有效期 7 天；剩余不足 4 天时，/user_api/settings 换发新令牌（滑动续期）
 export const USER_TOKEN_TTL_SECONDS = 7 * 24 * 60 * 60;
 export const USER_TOKEN_REFRESH_WITHIN_SECONDS = 4 * 24 * 60 * 60;
+
+export type AddressCredentialDecision = 'ok' | 'revoked' | 'credential_login_disabled';
+
+/**
+ * 邮箱凭证是否可用：
+ * - 凭证里的 cv 必须等于地址当前的 credential_version，否则已被重置（revoked）；
+ * - 地址关闭了邮箱凭证登录时，只接受通过账号取得、且账号会话仍然有效的凭证。
+ */
+export const decideAddressCredential = ({
+    tokenVersion, currentVersion, credentialLoginDisabled, accountSessionValid,
+}: {
+    tokenVersion: unknown,
+    currentVersion: unknown,
+    credentialLoginDisabled: boolean,
+    accountSessionValid: boolean,
+}): AddressCredentialDecision => {
+    if (!isVersionCurrent(tokenVersion, currentVersion)) return 'revoked';
+    if (credentialLoginDisabled && !accountSessionValid) return 'credential_login_disabled';
+    return 'ok';
+};

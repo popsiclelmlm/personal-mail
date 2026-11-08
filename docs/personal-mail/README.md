@@ -11,6 +11,7 @@
 | `REGISTER_MODE` | 注册策略：`open`（按后台「允许注册」开关）、`invite`（凭邀请码注册）、`closed`（关闭注册）。`invite`、`closed` 时 OAuth2 也只能登录已有账号 | `open` |
 | `USER_DEFAULT_ROLE` | 新用户自动获得的角色；邀请码上指定了角色时以邀请码为准。现在不论是否开启邮件验证、是否走邀请码都会授予 | — |
 | `PASSWORD_PBKDF2_ITERATIONS` | 用户密码 PBKDF2-SHA256 迭代次数，范围 10000–100000（workerd 上限） | `100000` |
+| `USER_ROLES[].personal_send_balance` | 地址升级为个人邮箱时初始化的发信额度（写进 `address_sender`）；不配置则沿用上游的发信额度规则 | — |
 
 产品名称默认显示 Free Temp Mail（前端 i18n 的 `title`），不需要再设置 `TITLE`。
 
@@ -39,6 +40,19 @@
 邀请码存在独立的 `invite_codes`、`invite_code_uses` 表里，没有复用上游的兑换码表：兑换码的管理接口受 `ENABLE_REDEEM_CODE` 控制，打开它会同时开放公开的兑换接口和兑换页。
 
 注册在一个 D1 批次（事务）里完成「消耗邀请码 → 建用户 → 记录使用 → 授予角色」，邮箱已被注册时整批回滚，邀请码次数不会被占用；并发注册抢同一个邀请码的最后一次时只有一个成功。
+
+## 个人邮箱
+
+个人邮箱 = 绑定在账号名下、并且升级为永久（`is_permanent = 1`）的地址。
+
+- **升级**：地址管理「更多 → 设为个人邮箱」，即 `POST /user_api/bind_address/retention`（`permanent`）。只能升级自己名下的地址，占用角色的 `max_permanent_address_count` 额度；升级时默认**关闭邮箱凭证登录**，并按角色的 `personal_send_balance` 初始化发信额度。
+- **邮箱凭证版本**：所有签发邮箱凭证的地方（新建地址、地址密码登录、账号取得凭证、Telegram 绑定、Telegram 小程序、管理员查看凭证）都带上 `cv`。`POST /user_api/address/:address_id/reset_credential` 把版本加 1，旧凭证（含 Telegram 绑定）立即失效，并返回一个新的账号凭证。没有 `cv` 的老凭证按版本 0 处理。
+- **关闭邮箱凭证登录**（`address.credential_login_disabled = 1`）：直接使用邮箱凭证、地址密码登录、用凭证绑定地址、Telegram 绑定都会被拒绝；只接受通过账号取得的凭证（`/user_api/bind_address_jwt`，带 `uid` 和 `utv`），而且要求账号仍然绑定这个地址、账号没有「退出所有设备」或重设密码。开关接口：`POST /user_api/address/:address_id/credential_login`（`{ "enabled": true|false }`）。管理员「查看凭证」得到的也是普通凭证，关闭凭证登录时同样不能用。
+- **统一收件箱**：`GET /user_api/mails` 新增 `address_id`、`unread=1` 筛选；`GET /user_api/mails/unread_counts` 返回每个地址的未读数（个人邮箱排在前面）；`PATCH /user_api/mails/:id/read` 在收件箱里标记已读、未读。
+- **发信**：沿用上游的用户发信和发件箱（`/user_api/address/:address_id/send_mail`、`/user_api/sendbox`）。临时地址在 `DEFAULT_SEND_BALANCE = 0` 时没有额度，不能发信；如果配置了 `NO_LIMIT_SEND_ROLE`，该角色名下的临时地址也能发信。
+- **转移**：保留期、永久标记和「禁止邮箱凭证登录」原样保留，地址以新 id 重建（旧凭证失效），永久邮箱要占用对方的永久邮箱额度；不能转给自己。
+- **注销账号**：用户设置页「注销账号」。`GET /user_api/delete_account/preview` 列出名下的个人邮箱和其他地址；`POST /user_api/delete_account` 需要输入账号邮箱确认、设置过密码的账号还要输密码（失败计入登录锁定），每个个人邮箱必须选择删除或转移；其他已绑定地址连同邮件一起删除；最后删除账号、角色和通行密钥。
+- **管理员删除用户**：现在会一并删除该用户的角色和通行密钥（`users.id` 不是 AUTOINCREMENT，新用户可能复用被删用户的 id，原来会继承角色和通行密钥）。被删用户的个人邮箱变成无主的永久邮箱，不会被自动清理，需要时在后台手动删除。
 
 ## 自动清理
 

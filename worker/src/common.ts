@@ -10,6 +10,7 @@ import i18n from './i18n';
 import { formatWebhookBody, getWebhookAttachments } from './utils/webhook';
 import { compileFilter, type FilterValues } from './utils/filter';
 import { buildAddressCleanupCondition, buildBatchDeleteAddressStatements, isAddressCleanupType, MAILS_CLEANUP_SQL, SENDBOX_CLEANUP_SQL } from './retention';
+import { signAddressJwt } from './address_credential';
 
 const DEFAULT_NAME_REGEX = /[^a-z0-9]/g;
 const DEFAULT_RANDOM_SUBDOMAIN_LENGTH = 8;
@@ -460,11 +461,8 @@ export const newAddress = async (
             // 如果启用地址密码功能，自动生成密码
             const generatedPassword = await generatePasswordForAddress(c, address);
 
-            // create jwt
-            const jwt = await Jwt.sign({
-                address: address,
-                address_id: address_id
-            }, c.env.JWT_SECRET, "HS256")
+            // create jwt（带凭证版本 cv）
+            const jwt = await signAddressJwt(c, { address, address_id });
             return {
                 jwt: jwt,
                 address: address,

@@ -3,6 +3,8 @@ import { jwt } from 'hono/jwt';
 import { Jwt } from 'hono/utils/jwt';
 
 import i18n from './i18n';
+import { decideAddressCredential } from './auth_version';
+import { getAddressCredentialState, isAccountIssuedCredentialValid } from './address_credential';
 
 export const validateAddressPayload = async (
     c: Context<HonoCustomType>,
@@ -15,10 +17,19 @@ export const validateAddressPayload = async (
     ) return null;
     const addressId = Number(address_id);
     if (!Number.isSafeInteger(addressId) || addressId <= 0) return null;
-    const exists = await c.env.DB.prepare(
-        `SELECT id FROM address WHERE id = ? AND name = ?`
-    ).bind(addressId, address).first<number>('id');
-    return exists ? { address, address_id: addressId } : null;
+    // 地址必须存在；凭证版本 cv 要和数据库一致；关闭了邮箱凭证登录的地址只接受账号会话取得的凭证
+    const state = await getAddressCredentialState(c, addressId, address);
+    if (!state) return null;
+    const accountSessionValid = state.credential_login_disabled
+        ? await isAccountIssuedCredentialValid(c, payload, addressId)
+        : false;
+    const decision = decideAddressCredential({
+        tokenVersion: payload.cv,
+        currentVersion: state.credential_version,
+        credentialLoginDisabled: !!state.credential_login_disabled,
+        accountSessionValid,
+    });
+    return decision === 'ok' ? { address, address_id: addressId } : null;
 };
 
 export const verifyAddressToken = async (

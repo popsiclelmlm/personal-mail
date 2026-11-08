@@ -1,14 +1,16 @@
 import { Context } from "hono";
 import { Jwt } from "hono/utils/jwt";
 import { validateAddressPayload, verifyAddressToken } from '../address_auth';
+import { signAddressJwt } from '../address_credential';
 import { CONSTANTS } from "../constants";
 import { getBooleanValue, getIntValue, getJsonSetting } from "../utils";
 import { deleteAddressWithData, newAddress, generateRandomName } from "../common";
 import { LocaleMessages } from "../i18n/type";
 import i18n from '../i18n';
 
+// 绑定凭证同样带凭证版本 cv，重置邮箱凭证后 Telegram 的绑定也随之失效
 const createTelegramBindingToken = (c: Context<HonoCustomType>, address: string, addressId: number) =>
-    Jwt.sign({ type: 'telegram_binding', address, address_id: addressId }, c.env.JWT_SECRET, 'HS256');
+    signAddressJwt(c, { address, address_id: addressId }, { type: 'telegram_binding' });
 
 // Only for tokens read from the authenticated Telegram user's stored bindings.
 export const verifyTelegramBindingToken = async (c: Context<HonoCustomType>, token: string) => {

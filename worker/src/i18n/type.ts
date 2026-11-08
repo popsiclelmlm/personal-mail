@@ -198,4 +198,7 @@ export type LocaleMessages = {
     ResetPasswordNotAvailableMsg: string
     PasswordResetMailSubjectMsg: string
     PasswordResetMailContentMsg: string
+    AddressCredentialLoginDisabledMsg: string
+    DeleteAccountConfirmMismatchMsg: string
+    DeleteAccountPersonalAddressActionRequiredMsg: string
 }

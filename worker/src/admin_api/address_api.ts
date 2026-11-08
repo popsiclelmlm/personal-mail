@@ -5,6 +5,7 @@ import i18n from '../i18n'
 import { getBooleanValue } from '../utils'
 import { newAddress, handleListQuery } from '../common'
 import { unbindTelegramByAddress } from '../telegram_api/common'
+import { signAddressJwt } from '../address_credential';
 
 const listAddresses = async (c: Context<HonoCustomType>) => {
     const { limit, offset, query, sort_by, sort_order } = c.req.query();
@@ -139,11 +140,12 @@ const showPassword = async (c: Context<HonoCustomType>) => {
     const { id } = c.req.param();
     const name = await c.env.DB.prepare(
         `SELECT name FROM address WHERE id = ? `
-    ).bind(id).first("name");
-    const jwt = await Jwt.sign({
-        address: name,
-        address_id: id
-    }, c.env.JWT_SECRET, "HS256")
+    ).bind(id).first<string>("name");
+    if (!name) {
+        return c.text(i18n.getMessagesbyContext(c).AddressNotFoundMsg, 404);
+    }
+    // 带凭证版本 cv；地址关闭了邮箱凭证登录时这个凭证也不能用
+    const jwt = await signAddressJwt(c, { address: name, address_id: id });
     return c.json({ jwt });
 };
 

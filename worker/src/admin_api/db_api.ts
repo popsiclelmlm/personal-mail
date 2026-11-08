@@ -35,6 +35,8 @@ CREATE TABLE IF NOT EXISTS address (
     retention_type TEXT DEFAULT 'temporary',
     retention_until DATETIME,
     is_permanent INTEGER DEFAULT 0,
+    credential_version INTEGER DEFAULT 0,
+    credential_login_disabled INTEGER DEFAULT 0,
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
     updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
 );

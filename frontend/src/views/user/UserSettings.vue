@@ -6,12 +6,16 @@ import { NButton, NPopconfirm } from 'naive-ui'
 
 import { useGlobalState } from '../../store'
 import { api } from '../../api'
+import { hashPassword } from '../../utils'
 
 const { userJwt, userSettings, } = useGlobalState()
 const message = useMessage()
 
 const showLogout = ref(false)
 const showLogoutAll = ref(false)
+const showDeleteAccount = ref(false)
+const deletePreview = ref(null)
+const deleteForm = ref({ confirmEmail: '', password: '', actions: {} })
 const showCreatePasskey = ref(false)
 const passkeyName = ref('')
 const showPasskeyList = ref(false)
@@ -25,6 +29,48 @@ const { t } = useScopedI18n('views.user.UserSettings')
 const logout = async () => {
     userJwt.value = '';
     location.reload()
+}
+
+// 注销账号：先列出名下的个人邮箱，逐个选择删除或转移
+const openDeleteAccount = async () => {
+    try {
+        const preview = await api.fetch(`/user_api/delete_account/preview`)
+        deletePreview.value = preview
+        deleteForm.value = {
+            confirmEmail: '',
+            password: '',
+            actions: Object.fromEntries((preview.personal_addresses || []).map(
+                (row) => [row.id, { action: 'delete', target: '' }]
+            )),
+        }
+        showDeleteAccount.value = true
+    } catch (e) {
+        message.error(e.message || 'error')
+    }
+}
+
+const deleteAccount = async () => {
+    const preview = deletePreview.value
+    if (!preview) return
+    try {
+        await api.fetch(`/user_api/delete_account`, {
+            method: 'POST',
+            body: JSON.stringify({
+                confirm_email: deleteForm.value.confirmEmail,
+                password: preview.password_required ? await hashPassword(deleteForm.value.password) : undefined,
+                personal_addresses: (preview.personal_addresses || []).map((row) => {
+                    const item = deleteForm.value.actions[row.id]
+                    return item.action === 'transfer'
+                        ? { address_id: row.id, action: 'transfer', target_user_email: item.target.trim() }
+                        : { address_id: row.id, action: 'delete' }
+                }),
+            }),
+        })
+        userJwt.value = ''
+        location.reload()
+    } catch (e) {
+        message.error(e.message || 'error')
+    }
 }
 
 // 退出所有设备：服务端令牌版本加 1，包括当前设备在内的所有登录都失效
@@ -170,6 +216,15 @@ const renamePasskey = async () => {
 <template>
     <div class="center" v-if="userSettings.user_email">
         <n-card :bordered="false" embedded>
+            <!-- 额度只在设置页出现 -->
+            <n-descriptions :column="1" size="small" label-placement="left" class="quota">
+                <n-descriptions-item :label="t('addressQuota')">
+                    {{ userSettings.address_count ?? 0 }}<template v-if="userSettings.address_limit > 0"> / {{ userSettings.address_limit }}</template>
+                </n-descriptions-item>
+                <n-descriptions-item :label="t('personalQuota')">
+                    {{ userSettings.permanent_address_count ?? 0 }} / {{ userSettings.max_permanent_address_count ?? 0 }}
+                </n-descriptions-item>
+            </n-descriptions>
             <n-button @click="showPasskeyList = true; fetchPasskeyList();" secondary block strong>
                 {{ t('showPasskeyList') }}
             </n-button>
@@ -187,7 +242,39 @@ const renamePasskey = async () => {
             <n-button @click="showLogoutAll = true" tertiary block>
                 {{ t('logoutAll') }}
             </n-button>
+            <n-button @click="openDeleteAccount" tertiary block type="error">
+                {{ t('deleteAccount') }}
+            </n-button>
         </n-card>
+        <n-modal v-model:show="showDeleteAccount" preset="card" :title="t('deleteAccount')" style="max-width: 560px;">
+            <n-space v-if="deletePreview" vertical :size="16">
+                <n-text>{{ t('deleteAccountTip') }}</n-text>
+                <div v-if="deletePreview.personal_addresses.length">
+                    <n-text strong>{{ t('personalMailboxes') }}</n-text>
+                    <div v-for="row in deletePreview.personal_addresses" :key="row.id" class="personal-row">
+                        <n-text>{{ row.name }}</n-text>
+                        <n-radio-group v-model:value="deleteForm.actions[row.id].action" size="small">
+                            <n-radio value="delete">{{ t('deleteIt') }}</n-radio>
+                            <n-radio value="transfer">{{ t('transferIt') }}</n-radio>
+                        </n-radio-group>
+                        <n-input v-if="deleteForm.actions[row.id].action === 'transfer'" size="small"
+                            v-model:value="deleteForm.actions[row.id].target" :placeholder="t('transferTarget')" />
+                    </div>
+                </div>
+                <n-text v-if="deletePreview.other_addresses.length" depth="3">
+                    {{ t('otherAddressesDeleted', { count: deletePreview.other_addresses.length }) }}
+                </n-text>
+                <n-input v-model:value="deleteForm.confirmEmail" :placeholder="t('typeEmailToConfirm', { email: deletePreview.user_email })" />
+                <n-input v-if="deletePreview.password_required" v-model:value="deleteForm.password" type="password"
+                    show-password-on="click" :placeholder="t('currentPassword')" />
+            </n-space>
+            <template #action>
+                <n-space justify="end">
+                    <n-button size="small" tertiary @click="showDeleteAccount = false">{{ t('cancel') }}</n-button>
+                    <n-button size="small" type="error" @click="deleteAccount">{{ t('deleteAccount') }}</n-button>
+                </n-space>
+            </template>
+        </n-modal>
         <n-modal v-model:show="showCreatePasskey" preset="dialog" :title="t('createPasskey')">
             <n-input v-model:value="passkeyName" :placeholder="t('passkeyNamePlaceholder')" />
             <template #action>
@@ -230,6 +317,17 @@ const renamePasskey = async () => {
 .center {
     display: flex;
     justify-content: center;
+}
+
+.quota {
+    margin-bottom: 8px;
+}
+
+.personal-row {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    padding: 8px 0;
 }
 
 

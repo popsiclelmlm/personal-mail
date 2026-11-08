@@ -12,7 +12,7 @@ DEFAULT_DOMAINS = ["temp.test"]
 RANDOM_SUBDOMAIN_DOMAINS = ["temp.test"]
 CREATE_ADDRESS_DEFAULT_DOMAIN_FIRST = true
 USER_ROLES = [
-  { domains = ["personal.test", "temp.test"], role = "member", prefix = "", max_permanent_address_count = 2 },
+  { domains = ["personal.test", "temp.test"], role = "member", prefix = "", max_permanent_address_count = 2, personal_send_balance = 5 },
   { domains = ["personal.test", "temp.test"], role = "admin", prefix = "", max_permanent_address_count = 10 },
 ]
 USER_DEFAULT_ROLE = "member"

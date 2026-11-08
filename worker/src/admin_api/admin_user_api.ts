@@ -111,6 +111,12 @@ export default {
         const { success: addressSuccess } = await c.env.DB.prepare(
             `DELETE FROM users_address WHERE user_id = ?`
         ).bind(user_id).run();
+        // users.id 不是 AUTOINCREMENT，删除最大 id 的用户后新用户可能复用这个 id，
+        // 所以角色和通行密钥也要一起删，避免新用户继承
+        await c.env.DB.batch([
+            c.env.DB.prepare(`DELETE FROM user_roles WHERE user_id = ?`).bind(user_id),
+            c.env.DB.prepare(`DELETE FROM user_passkeys WHERE user_id = ?`).bind(user_id),
+        ]);
         if (!success || !addressSuccess) {
             return c.text(msgs.FailedDeleteUserMsg, 500)
         }

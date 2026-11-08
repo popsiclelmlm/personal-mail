@@ -7,6 +7,7 @@ import passkey from './passkey';
 import oauth2 from './oauth2';
 import user_mail_api from './user_mail_api';
 import user_send_mail_api from './user_send_mail_api';
+import personal_mailbox from './personal_mailbox';
 
 export const api = new Hono<HonoCustomType>();
 
@@ -16,7 +17,15 @@ api.get('/user_api/settings', settings.settings);
 
 // mail api
 api.get('/user_api/mails', user_mail_api.getMails);
+api.get('/user_api/mails/unread_counts', personal_mailbox.unreadCounts);
+api.patch('/user_api/mails/:id/read', personal_mailbox.updateMailReadStatus);
 api.delete('/user_api/mails/:id', user_mail_api.deleteMail);
+
+// personal mailbox api
+api.post('/user_api/address/:address_id/reset_credential', personal_mailbox.resetCredential);
+api.post('/user_api/address/:address_id/credential_login', personal_mailbox.setCredentialLogin);
+api.get('/user_api/delete_account/preview', personal_mailbox.deleteAccountPreview);
+api.post('/user_api/delete_account', personal_mailbox.deleteAccount);
 
 // send mail api
 api.get('/user_api/address/:address_id/settings', user_send_mail_api.settings);

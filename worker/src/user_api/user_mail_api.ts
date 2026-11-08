@@ -6,12 +6,23 @@ import { getBooleanValue } from "../utils";
 export default {
     getMails: async (c: Context<HonoCustomType>) => {
         const { user_id } = c.get("userPayload");
-        const { address, limit, offset } = c.req.query();
+        const { address, address_id, unread, limit, offset } = c.req.query();
         const filterQuerys = [`ua.user_id = ?`];
         const filterParams = [String(user_id)];
         if (address) {
             filterQuerys.push(`rm.address = ?`);
             filterParams.push(address);
+        }
+        // 统一收件箱：按地址 id 筛选、只看未读
+        if (address_id) {
+            if (!/^\d+$/.test(address_id)) {
+                return c.text(i18n.getMessagesbyContext(c).InvalidInputMsg, 400);
+            }
+            filterQuerys.push(`a.id = ?`);
+            filterParams.push(address_id);
+        }
+        if (unread === '1' || unread === 'true') {
+            filterQuerys.push(`rm.is_unread = 1`);
         }
         const fromQuery = ` FROM users_address ua`
             + ` JOIN address a ON a.id = ua.address_id`

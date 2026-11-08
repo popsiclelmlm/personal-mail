@@ -2,6 +2,7 @@ import { Context } from 'hono';
 import i18n from '../i18n';
 import utils, { getBooleanValue, hashPassword, checkCfTurnstile } from '../utils';
 import { Jwt } from 'hono/utils/jwt';
+import { signAddressJwt } from '../address_credential';
 
 export default {
     // 修改地址密码
@@ -72,11 +73,16 @@ export default {
             return c.text(msgs.InvalidEmailOrPasswordMsg, 401);
         }
 
-        // 创建JWT
-        const jwt = await Jwt.sign({
-            address: address.name,
-            address_id: address.id
-        }, c.env.JWT_SECRET, "HS256");
+        // 个人邮箱默认关闭邮箱凭证登录，只能通过账号访问
+        if (address.credential_login_disabled) {
+            return c.text(msgs.AddressCredentialLoginDisabledMsg, 403);
+        }
+
+        // 创建JWT（带凭证版本 cv）
+        const jwt = await signAddressJwt(c, {
+            address: address.name as string,
+            address_id: address.id as number,
+        });
 
         return c.json({
             jwt: jwt,

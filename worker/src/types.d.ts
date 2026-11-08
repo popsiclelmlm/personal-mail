@@ -4,6 +4,8 @@ type UserRole = {
     prefix: string | undefined | null,
     // 该角色可拥有的永久邮箱（个人邮箱）数量，没配置时为 0
     max_permanent_address_count?: number | undefined | null
+    // 地址升级为个人邮箱时初始化的发信额度，没配置时不初始化（沿用上游的发信额度规则）
+    personal_send_balance?: number | undefined | null
 }
 
 type SmtpImapProxyConfig = {

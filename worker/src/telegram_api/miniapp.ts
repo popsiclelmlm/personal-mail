@@ -6,6 +6,7 @@ import { checkCfTurnstile, checkIsAdmin, getBooleanValue } from "../utils";
 import { resolveRawEmailRow } from "../gzip";
 import { TelegramSettings } from "./settings";
 import i18n from "../i18n";
+import { signAddressJwt } from '../address_credential';
 
 const encoder = new TextEncoder();
 const TG_AUTH_TIMEOUT = 300;
@@ -70,7 +71,7 @@ async function getTelegramBindAddress(c: Context<HonoCustomType>): Promise<Respo
         for (const jwt of jwtList) {
             try {
                 const { address, address_id } = await verifyTelegramBindingToken(c, jwt);
-                res.push({ address, jwt: await Jwt.sign({ address, address_id }, c.env.JWT_SECRET, 'HS256') });
+                res.push({ address, jwt: await signAddressJwt(c, { address, address_id }) });
             } catch (e) {
                 console.error(`failed to verify jwt with error: ${e}`)
                 continue;
