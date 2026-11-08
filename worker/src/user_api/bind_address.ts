@@ -5,6 +5,7 @@ import { isAddressCountLimitReached } from "../utils"
 import { unbindTelegramByAddress } from '../telegram_api/common';
 import i18n from '../i18n';
 import { updateAddressUpdatedAt, commonGetUserRole, handleListQuery, hideObjectFields } from '../common';
+import { isRetentionType } from '../retention';
 
 export const getBindedAddressById = async (
     c: Context<HonoCustomType>,
@@ -277,6 +278,56 @@ const UserBindAddressModule = {
             return c.text(msgs.OperationFailedMsg, 500)
         }
         return c.json({ success: true })
+    },
+    // 修改已绑定地址的保留类型：temporary（1 天后可被清理）、extended（保留 30 天）、permanent（永久）
+    updateRetention: async (c: Context<HonoCustomType>) => {
+        const msgs = i18n.getMessagesbyContext(c);
+        const { user_id } = c.get("userPayload");
+        const { address_id, retention_type } = await c.req.json();
+        if (!address_id || !user_id || !retention_type) {
+            return c.text(msgs.RequiredFieldMsg, 400);
+        }
+        if (!isRetentionType(retention_type)) {
+            return c.text(msgs.InvalidRetentionTypeMsg, 400);
+        }
+        // 只能修改绑定在自己名下的地址
+        const address = await getBindedAddressById(c, user_id, address_id);
+        if (!address) {
+            return c.text(msgs.AddressNotBindedMsg, 400);
+        }
+        if (retention_type === 'permanent') {
+            const isPermanent = await c.env.DB.prepare(
+                `SELECT is_permanent FROM address WHERE id = ?`
+            ).bind(address_id).first<number>("is_permanent");
+            if (!isPermanent) {
+                const userRole = await commonGetUserRole(c, user_id);
+                const maxPermanent = userRole?.max_permanent_address_count ?? 0;
+                const { count } = await c.env.DB.prepare(
+                    `SELECT COUNT(*) AS count FROM address a`
+                    + ` JOIN users_address ua ON ua.address_id = a.id`
+                    + ` WHERE ua.user_id = ? AND a.is_permanent = 1`
+                ).bind(user_id).first<{ count: number }>() || { count: 0 };
+                if (maxPermanent <= 0 || count >= maxPermanent) {
+                    return c.text(msgs.PermanentQuotaExceededMsg, 400);
+                }
+            }
+            await c.env.DB.prepare(
+                `UPDATE address SET retention_type = 'permanent', is_permanent = 1,`
+                + ` retention_until = NULL, updated_at = datetime('now') WHERE id = ?`
+            ).bind(address_id).run();
+        } else if (retention_type === 'extended') {
+            await c.env.DB.prepare(
+                `UPDATE address SET retention_type = 'extended', is_permanent = 0,`
+                + ` retention_until = datetime('now', '+30 day'), updated_at = datetime('now') WHERE id = ?`
+            ).bind(address_id).run();
+        } else {
+            // 改回临时时留 1 天缓冲，避免立刻被清理
+            await c.env.DB.prepare(
+                `UPDATE address SET retention_type = 'temporary', is_permanent = 0,`
+                + ` retention_until = datetime('now', '+1 day'), updated_at = datetime('now') WHERE id = ?`
+            ).bind(address_id).run();
+        }
+        return c.json({ success: true });
     }
 }
 

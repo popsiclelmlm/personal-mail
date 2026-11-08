@@ -1,7 +1,9 @@
 type UserRole = {
     domains: string[] | undefined | null,
     role: string,
-    prefix: string | undefined | null
+    prefix: string | undefined | null,
+    // 该角色可拥有的永久邮箱（个人邮箱）数量，没配置时为 0
+    max_permanent_address_count?: number | undefined | null
 }
 
 type SmtpImapProxyConfig = {
@@ -75,6 +77,8 @@ type Bindings = {
     DISABLE_SHOW_GITHUB: string | boolean | undefined
     DISABLE_SHOW_GITHUB_FOR_USER: string | boolean | undefined
     FORWARD_ADDRESS_LIST: string | string[] | undefined
+    // 同一 IP 在同一基础域名下同时存在的地址上限，默认 5，0 表示关闭；有角色的登录用户不受限
+    IP_DOMAIN_CREATE_LIMIT: string | number | undefined
 
     ENABLE_CHECK_JUNK_MAIL: string | boolean | undefined
     JUNK_MAIL_CHECK_LIST: string | string[] | undefined

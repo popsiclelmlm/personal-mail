@@ -224,7 +224,8 @@ app.use('/user_api/*', async (c, next) => {
 		const response = await checkoutUserRolePayload(c, user_id);
 		if (response) return response;
 	}
-	if (c.req.path.startsWith('/user_api/bind_address')
+	// 只有「凭邮箱凭证绑定地址」需要邮箱凭证，/user_api/bind_address/retention 等子路径只看账号
+	if (c.req.path === '/user_api/bind_address'
 		&& c.req.method === 'POST'
 	) {
 		return addressJwtAuth(c, next);

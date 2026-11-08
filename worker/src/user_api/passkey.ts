@@ -60,7 +60,7 @@ export default {
         }, c.env.JWT_SECRET, "HS256")
         // Use SimpleWebAuthn's handy function to create registration options.
         const options = await generateRegistrationOptions({
-            rpName: c.env.TITLE || "Temp Mail",
+            rpName: c.env.TITLE || "Free Temp Mail",
             rpID: domain,
             userID: new TextEncoder().encode(user.user_id.toString()),
             userName: user.user_email,

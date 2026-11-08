@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64">
+  <!-- 应用图标：teal-500 圆角方块 + 白色屋形信封；用于网站图标、PWA、页头 -->
+  <rect width="64" height="64" rx="14" fill="#0F8294"/>
+  <g transform="translate(8 8) scale(0.75)" fill="none" stroke="#FFFFFF" stroke-width="5.2" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M10 27 L32 11 L54 27 V48 a4 4 0 0 1 -4 4 H14 a4 4 0 0 1 -4 -4 Z"/>
+    <path d="M10 27 L32 42 L54 27"/>
+  </g>
+</svg>

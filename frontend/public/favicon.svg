@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64">
+  <!-- 16–32px 用的应用图标：标志放大、线条加粗，保证小尺寸清晰 -->
+  <rect width="64" height="64" rx="14" fill="#0F8294"/>
+  <g transform="translate(5 5) scale(0.84375)" fill="none" stroke="#FFFFFF" stroke-width="6.5" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M10 27 L32 11 L54 27 V48 a4 4 0 0 1 -4 4 H14 a4 4 0 0 1 -4 -4 Z"/>
+    <path d="M10 27 L32 42 L54 27"/>
+  </g>
+</svg>

@@ -2,6 +2,7 @@ import { Context } from "hono";
 import { CONSTANTS } from "../constants";
 import utils from "../utils";
 import { compareVersions } from "../utils/version";
+import { applyCustomMigrations, getMissingCustomColumns } from "./custom_migrations";
 
 const DB_INIT_QUERIES = `
 CREATE TABLE IF NOT EXISTS raw_mails (
@@ -31,6 +32,9 @@ CREATE TABLE IF NOT EXISTS address (
     name TEXT UNIQUE,
     password TEXT,
     source_meta TEXT,
+    retention_type TEXT DEFAULT 'temporary',
+    retention_until DATETIME,
+    is_permanent INTEGER DEFAULT 0,
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
     updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
 );
@@ -42,6 +46,8 @@ CREATE INDEX IF NOT EXISTS idx_address_created_at ON address(created_at);
 CREATE INDEX IF NOT EXISTS idx_address_updated_at ON address(updated_at);
 
 CREATE INDEX IF NOT EXISTS idx_address_source_meta ON address(source_meta);
+
+CREATE INDEX IF NOT EXISTS idx_address_is_permanent ON address(is_permanent);
 
 CREATE TABLE IF NOT EXISTS auto_reply_mails (
     id INTEGER PRIMARY KEY,
@@ -227,7 +233,8 @@ export default {
                 );
             }
         }
-        if (!version || compareVersions(version, CONSTANTS.DB_VERSION) < 0) {
+        const needBaseMigration = !version || compareVersions(version, CONSTANTS.DB_VERSION) < 0;
+        if (needBaseMigration) {
             // remove all \r and \n characters from the query string
             // split by ; and join with a ;\n
             const query = DB_INIT_QUERIES.replace(/[\r\n]/g, "")
@@ -237,6 +244,10 @@ export default {
             await c.env.DB.exec(query);
             // Update the version in the settings table
             await utils.saveSetting(c, CONSTANTS.DB_VERSION_KEY, CONSTANTS.DB_VERSION);
+        }
+        // 本仓库新增的列，不依赖上游的版本号
+        const customColumnsAdded = await applyCustomMigrations(c.env.DB);
+        if (needBaseMigration || customColumnsAdded > 0) {
             return c.json({
                 success: true,
                 message: "Database migrated"
@@ -252,7 +263,10 @@ export default {
         const sizeResult = await c.env.DB.prepare("SELECT 1").run();
         return c.json({
             need_initialization: !version,
-            need_migration: version && compareVersions(version, CONSTANTS.DB_VERSION) < 0,
+            need_migration: version && (
+                compareVersions(version, CONSTANTS.DB_VERSION) < 0
+                || (await getMissingCustomColumns(c.env.DB)).length > 0
+            ),
             current_db_version: version,
             code_db_version: CONSTANTS.DB_VERSION,
             database_size: sizeResult.meta.size_after ?? null

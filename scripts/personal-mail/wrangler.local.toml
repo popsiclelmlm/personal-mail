@@ -1,0 +1,45 @@
+# 本地验证用配置：复制成 worker/wrangler.toml（已被 gitignore）后运行 wrangler dev，不要用于部署
+name = "cloudflare_temp_email"
+main = "../e2e/fixtures/worker.ts"
+compatibility_date = "2025-04-01"
+compatibility_flags = [ "nodejs_compat" ]
+keep_vars = true
+
+[vars]
+PREFIX = ""
+DOMAINS = ["personal.test", "temp.test"]
+DEFAULT_DOMAINS = ["temp.test"]
+RANDOM_SUBDOMAIN_DOMAINS = ["temp.test"]
+CREATE_ADDRESS_DEFAULT_DOMAIN_FIRST = true
+USER_ROLES = [
+  { domains = ["personal.test", "temp.test"], role = "member", prefix = "", max_permanent_address_count = 2 },
+  { domains = ["personal.test", "temp.test"], role = "admin", prefix = "", max_permanent_address_count = 10 },
+]
+USER_DEFAULT_ROLE = "member"
+ADMIN_USER_ROLE = "admin"
+ADMIN_PASSWORDS = '["local-admin-pass"]'
+JWT_SECRET = "local-test-secret-key"
+ENABLE_USER_CREATE_EMAIL = true
+ENABLE_USER_DELETE_EMAIL = true
+ENABLE_MAIL_READ_STATUS = true
+ENABLE_ADDRESS_PASSWORD = true
+ENABLE_AUTO_REPLY = false
+DEFAULT_SEND_BALANCE = 0
+IP_DOMAIN_CREATE_LIMIT = 2
+BACKEND_URL = "http://127.0.0.1:8797/"
+SMTP_CONFIG = """
+{"personal.test":{"host":"127.0.0.1","port":1025,"secure":false}}
+"""
+
+[[kv_namespaces]]
+binding = "KV"
+id = "local-kv-00000000-0000-0000-0000-000000000000"
+
+[[d1_databases]]
+binding = "DB"
+database_name = "local-temp-email"
+database_id = "local-db-00000000-0000-0000-0000-000000000000"
+
+[alias]
+"cloudflare:email" = "../e2e/fixtures/email.ts"
+"telegraf" = "./node_modules/telegraf"

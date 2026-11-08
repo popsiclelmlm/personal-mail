@@ -46,16 +46,13 @@ export default defineConfig({
         cleanupOutdatedCaches: true,
       },
       manifest: {
-        name: 'Temp Email',
-        short_name: 'Temp Email',
-        description: 'Temp Email - Temporary Email',
+        name: 'Free Temp Mail',
+        short_name: 'Free Temp Mail',
+        description: 'Free Temp Mail',
         theme_color: '#ffffff',
         icons: [
-          {
-            src: '/logo.png',
-            sizes: '192x192',
-            type: 'image/png'
-          }
+          { src: '/pwa-192.png', sizes: '192x192', type: 'image/png' },
+          { src: '/pwa-512.png', sizes: '512x512', type: 'image/png' }
         ]
       }
     })

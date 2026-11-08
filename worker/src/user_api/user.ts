@@ -51,10 +51,10 @@ export default {
         // send code to email
         try {
             await sendMail(c, settings.verifyMailSender, {
-                from_name: "Temp Mail Verify",
+                from_name: "Free Temp Mail",
                 to_name: '',
                 to_mail: email as string,
-                subject: "Temp Mail Verify code",
+                subject: "Free Temp Mail verification code",
                 content: `Your verify code is ${code}`,
                 is_html: false,
             })

@@ -191,6 +191,9 @@ const messages: LocaleMessages = {
     TgAiExtractServiceLinkMsg: "Service link",
     TgAiExtractSubscriptionLinkMsg: "Subscription link",
     TgAiExtractOtherLinkMsg: "Other link",
+    IpDomainMaxAddressCountReachedMsg: "The maximum number of addresses created under this domain from your IP has been reached",
+    InvalidRetentionTypeMsg: "Invalid retention type",
+    PermanentQuotaExceededMsg: "Permanent mailbox quota exceeded",
 }
 
 export default messages;

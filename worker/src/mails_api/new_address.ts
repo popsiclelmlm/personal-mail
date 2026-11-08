@@ -2,8 +2,9 @@ import { Context } from 'hono'
 
 import i18n from '../i18n';
 import { getBooleanValue, getJsonSetting, checkCfTurnstile, isAddressCountLimitReached } from '../utils';
-import { newAddress, getAddressPrefix, generateRandomName } from '../common'
+import { newAddress, getAddressPrefix, generateRandomName, commonGetUserRole } from '../common'
 import { CONSTANTS } from '../constants'
+import { assertIpDomainLimitNotReached, IpDomainLimitError, resolveIpDomainCreateLimit, shouldCheckIpDomainLimit } from '../retention'
 
 const createNewAddress = async (c: Context<HonoCustomType>) => {
     const msgs = i18n.getMessagesbyContext(c);
@@ -57,16 +58,35 @@ const createNewAddress = async (c: Context<HonoCustomType>) => {
             || c.req.header('X-Forwarded-For')?.split(',')[0]?.trim()
             || c.req.header('X-Real-IP')
             || 'web:unknown';
+        // 「IP × 基础域名」创建上限只管匿名用户和没有角色的登录用户
+        const ipDomainLimit = resolveIpDomainCreateLimit(c.env.IP_DOMAIN_CREATE_LIMIT);
+        const hasRole = userPayload
+            ? !!(await commonGetUserRole(c, userPayload.user_id))
+            : false;
+        const checkIpDomainLimit = shouldCheckIpDomainLimit({
+            sourceIp: sourceMeta, hasRole, limit: ipDomainLimit,
+        });
         const res = await newAddress(c, {
             name, domain,
             enablePrefix: true,
             enableRandomSubdomain: getBooleanValue(enableRandomSubdomain),
             checkLengthByConfig: true,
             addressPrefix,
-            sourceMeta
+            sourceMeta,
+            beforeInsert: checkIpDomainLimit
+                ? ({ baseDomain }) => assertIpDomainLimitNotReached(c.env.DB, {
+                    sourceIp: sourceMeta,
+                    baseDomain,
+                    limit: ipDomainLimit,
+                    message: msgs.IpDomainMaxAddressCountReachedMsg,
+                })
+                : null,
         });
         return c.json(res);
     } catch (e) {
+        if (e instanceof IpDomainLimitError) {
+            return c.text(e.message, 429)
+        }
         return c.text(`${msgs.FailedCreateAddressMsg}: ${(e as Error).message}`, 400)
     }
 };

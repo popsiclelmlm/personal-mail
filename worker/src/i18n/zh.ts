@@ -191,6 +191,9 @@ const messages: LocaleMessages = {
     TgAiExtractServiceLinkMsg: "服务链接",
     TgAiExtractSubscriptionLinkMsg: "订阅链接",
     TgAiExtractOtherLinkMsg: "其他链接",
+    IpDomainMaxAddressCountReachedMsg: "该 IP 在此域名下创建的邮箱数量已达上限",
+    InvalidRetentionTypeMsg: "无效的保留类型",
+    PermanentQuotaExceededMsg: "永久邮箱额度已用完",
 }
 
 export default messages;

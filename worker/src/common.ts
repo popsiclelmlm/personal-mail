@@ -9,6 +9,7 @@ import { AddressCreationSettings, AdminWebhookSettings, ExtractResult, WebhookMa
 import i18n from './i18n';
 import { formatWebhookBody, getWebhookAttachments } from './utils/webhook';
 import { compileFilter, type FilterValues } from './utils/filter';
+import { buildAddressCleanupCondition, buildBatchDeleteAddressStatements, isAddressCleanupType, MAILS_CLEANUP_SQL, SENDBOX_CLEANUP_SQL } from './retention';
 
 const DEFAULT_NAME_REGEX = /[^a-z0-9]/g;
 const DEFAULT_RANDOM_SUBDOMAIN_LENGTH = 8;
@@ -360,6 +361,7 @@ export const newAddress = async (
         checkAllowDomains = true,
         enableCheckNameRegex = true,
         sourceMeta = null,
+        beforeInsert = null,
     }: {
         name: string, domain: string | undefined | null,
         enablePrefix: boolean,
@@ -369,6 +371,8 @@ export const newAddress = async (
         checkAllowDomains?: boolean,
         enableCheckNameRegex?: boolean,
         sourceMeta?: string | undefined | null,
+        // 域名解析完成之后、写库之前调用，抛出的错误原样向上传递
+        beforeInsert?: ((target: { domain: string, baseDomain: string }) => Promise<void>) | null,
     }
 ): Promise<{ address: string, jwt: string, password?: string | null, address_id: number }> => {
     const msgs = i18n.getMessagesbyContext(c);
@@ -429,6 +433,9 @@ export const newAddress = async (
     }
     if (enableRandomSubdomain && !allowRandomSubdomainForDomain(c, domain)) {
         throw new Error(msgs.RandomSubdomainNotAllowedMsg)
+    }
+    if (beforeInsert) {
+        await beforeInsert({ domain, baseDomain: matchedAllowDomain });
     }
 
     const maxAttempts = enableRandomSubdomain ? MAX_RANDOM_SUBDOMAIN_ATTEMPTS : 1;
@@ -513,42 +520,18 @@ export const cleanup = async (
         cleanupBatchSize = 3000;
     }
     console.log(`Cleanup ${cleanType} before ${cleanDays} days`);
+    // 地址类清理统一排除永久邮箱和仍在保留期内的地址，条件见 retention.ts
+    if (isAddressCleanupType(cleanType)) {
+        await batchDeleteAddressWithData(
+            c,
+            buildAddressCleanupCondition(cleanType, cleanDays, cleanupBatchSize)
+        )
+        return true;
+    }
     switch (cleanType) {
-        case "inactiveAddress":
-            await batchDeleteAddressWithData(
-                c,
-                `id IN (`
-                + `SELECT id FROM address WHERE updated_at < datetime('now', '-${cleanDays} day') `
-                + `ORDER BY updated_at, id LIMIT ${cleanupBatchSize})`
-            )
-            break;
-        case "addressCreated":
-            await batchDeleteAddressWithData(
-                c,
-                `id IN (`
-                + `SELECT id FROM address WHERE created_at < datetime('now', '-${cleanDays} day') `
-                + `ORDER BY created_at, id LIMIT ${cleanupBatchSize})`
-            )
-            break;
-        case "unboundAddress":
-            await batchDeleteAddressWithData(
-                c,
-                `id IN (`
-                + `SELECT a.id FROM address AS a `
-                + `WHERE a.created_at < datetime('now', '-${cleanDays} day') `
-                + `AND NOT EXISTS (SELECT 1 FROM users_address AS ua WHERE ua.address_id = a.id) `
-                + `ORDER BY a.created_at, a.id LIMIT ${cleanupBatchSize})`
-            )
-            break;
         case "mails":
-            await c.env.DB.prepare(`
-                DELETE FROM raw_mails WHERE id IN (
-                    SELECT id FROM raw_mails
-                    WHERE created_at < datetime('now', ?)
-                    ORDER BY created_at, id
-                    LIMIT ?
-                )`
-            ).bind(`-${cleanDays} day`, cleanupBatchSize).run();
+            await c.env.DB.prepare(MAILS_CLEANUP_SQL)
+                .bind(`-${cleanDays} day`, cleanupBatchSize).run();
             break;
         case "mails_unknow":
             await c.env.DB.prepare(`
@@ -564,25 +547,8 @@ export const cleanup = async (
             ).bind(`-${cleanDays} day`, cleanupBatchSize).run();
             break;
         case "sendbox":
-            await c.env.DB.prepare(`
-                DELETE FROM sendbox WHERE id IN (
-                    SELECT id FROM sendbox
-                    WHERE created_at < datetime('now', ?)
-                    ORDER BY created_at, id
-                    LIMIT ?
-                )`
-            ).bind(`-${cleanDays} day`, cleanupBatchSize).run();
-            break;
-        case "emptyAddress":
-            // Delete addresses that have no emails and were created more than N days ago
-            await batchDeleteAddressWithData(
-                c,
-                `id IN (`
-                + `SELECT a.id FROM address AS a `
-                + `WHERE a.created_at < datetime('now', '-${cleanDays} day') `
-                + `AND NOT EXISTS (SELECT 1 FROM raw_mails AS rm WHERE rm.address = a.name) `
-                + `ORDER BY a.created_at, a.id LIMIT ${cleanupBatchSize})`
-            )
+            await c.env.DB.prepare(SENDBOX_CLEANUP_SQL)
+                .bind(`-${cleanDays} day`, cleanupBatchSize).run();
             break;
         default:
             throw new Error(msgs.InvalidCleanTypeMsg)
@@ -594,30 +560,9 @@ const batchDeleteAddressWithData = async (
     c: Context<HonoCustomType>,
     addressQueryCondition: string,
 ): Promise<boolean> => {
-    await c.env.DB.prepare(
-        `DELETE FROM raw_mails WHERE address IN ( ` +
-        `SELECT name FROM address WHERE ${addressQueryCondition})`
-    ).run();
-    await c.env.DB.prepare(
-        `DELETE FROM sendbox WHERE address IN ( ` +
-        `SELECT name FROM address WHERE ${addressQueryCondition})`
-    ).run();
-    await c.env.DB.prepare(
-        `DELETE FROM auto_reply_mails WHERE address IN ( ` +
-        `SELECT name FROM address WHERE ${addressQueryCondition})`
-    ).run();
-    await c.env.DB.prepare(
-        `DELETE FROM address_sender WHERE address IN ( ` +
-        `SELECT name FROM address WHERE ${addressQueryCondition})`
-    ).run();
-    await c.env.DB.prepare(
-        `DELETE FROM users_address WHERE address_id IN ( ` +
-        `SELECT id FROM address WHERE ${addressQueryCondition})`
-    ).run();
-    // delete address
-    await c.env.DB.prepare(`
-        DELETE FROM address WHERE ${addressQueryCondition}`
-    ).run();
+    for (const statement of buildBatchDeleteAddressStatements(addressQueryCondition)) {
+        await c.env.DB.prepare(statement).run();
+    }
     return true;
 }
 

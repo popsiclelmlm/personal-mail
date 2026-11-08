@@ -189,4 +189,7 @@ export type LocaleMessages = {
     TgAiExtractServiceLinkMsg: string
     TgAiExtractSubscriptionLinkMsg: string
     TgAiExtractOtherLinkMsg: string
+    IpDomainMaxAddressCountReachedMsg: string
+    InvalidRetentionTypeMsg: string
+    PermanentQuotaExceededMsg: string
 }

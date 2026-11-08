@@ -218,26 +218,6 @@ useHead({
     ]
 });
 
-const logoClickCount = ref(0);
-const logoClick = async () => {
-    if (route.path.includes("admin")) {
-        logoClickCount.value = 0;
-        return;
-    }
-    if (logoClickCount.value >= 5) {
-        logoClickCount.value = 0;
-        message.info("Change to admin Page");
-        loading.value = true;
-        await router.push(getRouterPathWithLang('/admin', locale.value));
-        loading.value = false;
-    } else {
-        logoClickCount.value++;
-    }
-    if (logoClickCount.value > 0) {
-        message.info(`Click ${5 - logoClickCount.value + 1} times to enter the admin page`);
-    }
-}
-
 onMounted(async () => {
     await api.getOpenSettings(message, notification);
     // make sure user_id is fetched
@@ -252,9 +232,7 @@ onMounted(async () => {
                 <h3>{{ openSettings.title || t('title') }}</h3>
             </template>
             <template #avatar>
-                <div @click="logoClick">
-                    <n-avatar class="header-logo" src="/logo.png" />
-                </div>
+                <n-avatar class="header-logo" src="/logo.png" />
             </template>
             <template #extra>
                 <n-space align="center" class="header-extra">

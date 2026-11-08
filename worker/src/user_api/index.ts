@@ -40,6 +40,7 @@ api.post('/user_api/bind_address', bind_address.bind);
 api.get('/user_api/bind_address_jwt/:address_id', bind_address.getBindedAddressJwt);
 api.post('/user_api/unbind_address', bind_address.unbind);
 api.post('/user_api/transfer_address', bind_address.transferAddress);
+api.post('/user_api/bind_address/retention', bind_address.updateRetention);
 
 // passkey api
 api.get('/user_api/passkey', passkey.getPassKeys);

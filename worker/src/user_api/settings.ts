@@ -2,7 +2,7 @@ import { Context } from "hono";
 
 import i18n from "../i18n";
 import { UserOauth2Settings, UserSettings } from "../models";
-import { getJsonSetting, getUserRoles } from "../utils"
+import { getJsonSetting, getMaxAddressCount } from "../utils"
 import { CONSTANTS } from "../constants";
 import { commonGetUserRole, updateUserAddressesUpdatedAt } from "../common";
 import { Jwt } from "hono/utils/jwt";
@@ -65,12 +65,23 @@ export default {
             iat: Math.floor(Date.now() / 1000),
         }, c.env.JWT_SECRET, "HS256");
         updateUserAddressesUpdatedAt(c, user.user_id);
+        // 地址额度：已绑定数、上限、永久邮箱数与上限，只在设置页展示
+        const quota = await c.env.DB.prepare(
+            `SELECT COUNT(*) AS address_count,`
+            + ` COALESCE(SUM(CASE WHEN a.is_permanent = 1 THEN 1 ELSE 0 END), 0) AS permanent_address_count`
+            + ` FROM users_address ua JOIN address a ON a.id = ua.address_id WHERE ua.user_id = ?`
+        ).bind(db_user_id).first<{ address_count: number, permanent_address_count: number }>();
+        const userSettings = new UserSettings(await getJsonSetting(c, CONSTANTS.USER_SETTINGS_KEY));
         return c.json({
             ...user,
             is_admin: is_admin,
             access_token: access_token,
             new_user_token: new_user_token,
-            user_role: user_role
+            user_role: user_role,
+            address_count: quota?.address_count ?? 0,
+            address_limit: await getMaxAddressCount(c, user_role?.role, userSettings),
+            permanent_address_count: quota?.permanent_address_count ?? 0,
+            max_permanent_address_count: user_role?.max_permanent_address_count ?? 0,
         });
     },
 }
