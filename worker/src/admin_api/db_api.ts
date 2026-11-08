@@ -2,7 +2,7 @@ import { Context } from "hono";
 import { CONSTANTS } from "../constants";
 import utils from "../utils";
 import { compareVersions } from "../utils/version";
-import { applyCustomMigrations, getMissingCustomColumns } from "./custom_migrations";
+import { applyCustomMigrations, hasPendingCustomMigrations } from "./custom_migrations";
 
 const DB_INIT_QUERIES = `
 CREATE TABLE IF NOT EXISTS raw_mails (
@@ -94,11 +94,34 @@ CREATE TABLE IF NOT EXISTS users (
     user_email TEXT UNIQUE NOT NULL,
     password TEXT NOT NULL,
     user_info TEXT,
+    token_version INTEGER DEFAULT 0,
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
     updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
 );
 
 CREATE INDEX IF NOT EXISTS idx_users_user_email ON users(user_email);
+
+CREATE TABLE IF NOT EXISTS invite_codes (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    code TEXT UNIQUE NOT NULL,
+    role TEXT,
+    max_uses INTEGER NOT NULL DEFAULT 1,
+    used_count INTEGER NOT NULL DEFAULT 0,
+    enabled INTEGER NOT NULL DEFAULT 1,
+    note TEXT,
+    expires_at DATETIME,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS invite_code_uses (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    invite_code_id INTEGER NOT NULL,
+    user_id INTEGER NOT NULL,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX IF NOT EXISTS idx_invite_code_uses_invite_code_id ON invite_code_uses(invite_code_id);
 
 CREATE TABLE IF NOT EXISTS users_address (
     id INTEGER PRIMARY KEY,
@@ -245,9 +268,10 @@ export default {
             // Update the version in the settings table
             await utils.saveSetting(c, CONSTANTS.DB_VERSION_KEY, CONSTANTS.DB_VERSION);
         }
-        // 本仓库新增的列，不依赖上游的版本号
-        const customColumnsAdded = await applyCustomMigrations(c.env.DB);
-        if (needBaseMigration || customColumnsAdded > 0) {
+        // 本仓库新增的列和表，不依赖上游的版本号
+        const customPending = await hasPendingCustomMigrations(c.env.DB);
+        await applyCustomMigrations(c.env.DB);
+        if (needBaseMigration || customPending) {
             return c.json({
                 success: true,
                 message: "Database migrated"
@@ -265,7 +289,7 @@ export default {
             need_initialization: !version,
             need_migration: version && (
                 compareVersions(version, CONSTANTS.DB_VERSION) < 0
-                || (await getMissingCustomColumns(c.env.DB)).length > 0
+                || await hasPendingCustomMigrations(c.env.DB)
             ),
             current_db_version: version,
             code_db_version: CONSTANTS.DB_VERSION,

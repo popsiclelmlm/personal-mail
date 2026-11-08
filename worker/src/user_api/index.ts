@@ -29,6 +29,8 @@ api.delete('/user_api/sendbox/:mail_id', user_send_mail_api.removeUserSendboxMai
 api.post('/user_api/login', user.login);
 api.post('/user_api/verify_code', user.verifyCode);
 api.post('/user_api/register', user.register);
+api.post('/user_api/reset_password', user.resetPassword);
+api.post('/user_api/logout_all', user.logoutAll);
 
 // oauth2 api
 api.get('/user_api/oauth2/login_url', oauth2.getOauth2LoginUrl);

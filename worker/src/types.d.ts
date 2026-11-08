@@ -77,6 +77,10 @@ type Bindings = {
     DISABLE_SHOW_GITHUB: string | boolean | undefined
     DISABLE_SHOW_GITHUB_FOR_USER: string | boolean | undefined
     FORWARD_ADDRESS_LIST: string | string[] | undefined
+    // 注册策略：open（默认）、invite（凭邀请码注册）、closed
+    REGISTER_MODE: string | undefined
+    // 用户密码 PBKDF2 迭代次数，默认 100000（workerd 的上限），最少 10000
+    PASSWORD_PBKDF2_ITERATIONS: string | number | undefined
     // 同一 IP 在同一基础域名下同时存在的地址上限，默认 5，0 表示关闭；有角色的登录用户不受限
     IP_DOMAIN_CREATE_LIMIT: string | number | undefined
 
@@ -141,6 +145,8 @@ type JwtPayload = {
 type UserPayload = {
     user_email: string
     user_id: number
+    // 令牌版本，对应 users.token_version；老令牌没有这个字段，按 0 处理
+    tv?: number
     exp: number
     iat: number
 }

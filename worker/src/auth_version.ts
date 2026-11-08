@@ -1,0 +1,20 @@
+// 凭证版本号：用户令牌里的 tv 对应 users.token_version，邮箱凭证里的 cv 对应 address.credential_version。
+// 版本号加 1 即让旧凭证全部失效；老凭证没有版本字段，按 0 处理，升级后已登录的用户不会被立即踢出。
+// 本文件不引入其他模块，便于在 Node 里直接做单元测试。
+
+/** 把版本号规范成非负整数；无效值返回 -1（永远不会和数据库里的版本相等） */
+export const normalizeVersion = (value: unknown): number => {
+    if (value === undefined || value === null) return 0;
+    const version = typeof value === 'number' ? value : Number(value);
+    return Number.isSafeInteger(version) && version >= 0 ? version : -1;
+};
+
+/** 凭证里的版本是否等于当前版本 */
+export const isVersionCurrent = (tokenVersion: unknown, currentVersion: unknown): boolean => {
+    const token = normalizeVersion(tokenVersion);
+    return token >= 0 && token === normalizeVersion(currentVersion);
+};
+
+// 用户令牌有效期 7 天；剩余不足 4 天时，/user_api/settings 换发新令牌（滑动续期）
+export const USER_TOKEN_TTL_SECONDS = 7 * 24 * 60 * 60;
+export const USER_TOKEN_REFRESH_WITHIN_SECONDS = 4 * 24 * 60 * 60;

@@ -11,6 +11,7 @@ const { userJwt, userSettings, } = useGlobalState()
 const message = useMessage()
 
 const showLogout = ref(false)
+const showLogoutAll = ref(false)
 const showCreatePasskey = ref(false)
 const passkeyName = ref('')
 const showPasskeyList = ref(false)
@@ -24,6 +25,17 @@ const { t } = useScopedI18n('views.user.UserSettings')
 const logout = async () => {
     userJwt.value = '';
     location.reload()
+}
+
+// 退出所有设备：服务端令牌版本加 1，包括当前设备在内的所有登录都失效
+const logoutAll = async () => {
+    try {
+        await api.fetch(`/user_api/logout_all`, { method: 'POST' })
+        userJwt.value = '';
+        location.reload()
+    } catch (e) {
+        message.error(e.message || 'logout failed')
+    }
 }
 
 const createPasskey = async () => {
@@ -172,6 +184,9 @@ const renamePasskey = async () => {
             <n-button @click="showLogout = true" secondary block strong>
                 {{ t('logout') }}
             </n-button>
+            <n-button @click="showLogoutAll = true" tertiary block>
+                {{ t('logoutAll') }}
+            </n-button>
         </n-card>
         <n-modal v-model:show="showCreatePasskey" preset="dialog" :title="t('createPasskey')">
             <n-input v-model:value="passkeyName" :placeholder="t('passkeyNamePlaceholder')" />
@@ -191,6 +206,14 @@ const renamePasskey = async () => {
         </n-modal>
         <n-modal v-model:show="showPasskeyList" preset="card" :title="t('showPasskeyList')">
             <n-data-table :columns="passkeyColumns" :data="passkeyData" :bordered="false" embedded />
+        </n-modal>
+        <n-modal v-model:show="showLogoutAll" preset="dialog" :title="t('logoutAll')">
+            <p>{{ t('logoutAllConfirm') }}</p>
+            <template #action>
+                <n-button @click="logoutAll" size="small" tertiary type="warning">
+                    {{ t('logoutAll') }}
+                </n-button>
+            </template>
         </n-modal>
         <n-modal v-model:show="showLogout" preset="dialog" :title="t('logout')">
             <p>{{ t('logoutConfirm') }}</p>

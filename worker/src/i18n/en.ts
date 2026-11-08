@@ -194,6 +194,12 @@ const messages: LocaleMessages = {
     IpDomainMaxAddressCountReachedMsg: "The maximum number of addresses created under this domain from your IP has been reached",
     InvalidRetentionTypeMsg: "Invalid retention type",
     PermanentQuotaExceededMsg: "Permanent mailbox quota exceeded",
+    InviteCodeRequiredMsg: "An invite code is required to register",
+    InviteCodeInvalidMsg: "The invite code is invalid, expired or used up",
+    TooManyAttemptsMsg: "Too many failed attempts, please try again in 15 minutes",
+    ResetPasswordNotAvailableMsg: "Password reset is not available, please contact the administrator",
+    PasswordResetMailSubjectMsg: "Your Free Temp Mail password was reset",
+    PasswordResetMailContentMsg: "The password of your Free Temp Mail account was just reset, and all devices have been signed out. If this was not you, reset your password again and contact the administrator.",
 }
 
 export default messages;

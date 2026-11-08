@@ -26,6 +26,7 @@ ENABLE_ADDRESS_PASSWORD = true
 ENABLE_AUTO_REPLY = false
 DEFAULT_SEND_BALANCE = 0
 IP_DOMAIN_CREATE_LIMIT = 2
+REGISTER_MODE = "invite"
 BACKEND_URL = "http://127.0.0.1:8797/"
 SMTP_CONFIG = """
 {"personal.test":{"host":"127.0.0.1","port":1025,"secure":false}}

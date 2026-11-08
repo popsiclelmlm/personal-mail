@@ -540,6 +540,14 @@ export const MESSAGE_REGISTRY = {
     }
   },
   "views.user.UserSettings": {
+    "logoutAll": {
+      "en": "Sign out of all devices",
+      "zh": "退出所有设备"
+    },
+    "logoutAllConfirm": {
+      "en": "Every device signed in to this account, including this one, will need to log in again.",
+      "zh": "所有登录了这个账号的设备（包括当前设备）都需要重新登录。"
+    },
     "actions": {
       "en": "Actions",
       "zh": "操作"
@@ -653,6 +661,10 @@ export const MESSAGE_REGISTRY = {
     "about": {
       "en": "About",
       "zh": "关于"
+    },
+    "inviteCodes": {
+      "en": "Invite codes",
+      "zh": "邀请码"
     },
     "accessHeader": {
       "en": "Admin Password",
@@ -809,6 +821,88 @@ export const MESSAGE_REGISTRY = {
     "workerconfig": {
       "en": "Worker Config",
       "zh": "Worker 配置"
+    }
+  },
+  "views.admin.InviteCodes": {
+    "actions": {
+      "en": "Actions",
+      "zh": "操作"
+    },
+    "code": {
+      "en": "Code",
+      "zh": "邀请码"
+    },
+    "copied": {
+      "en": "Copied",
+      "zh": "已复制"
+    },
+    "copy": {
+      "en": "Copy all",
+      "zh": "全部复制"
+    },
+    "count": {
+      "en": "How many",
+      "zh": "生成数量"
+    },
+    "create": {
+      "en": "Create",
+      "zh": "生成"
+    },
+    "created": {
+      "en": "{count} invite codes created",
+      "zh": "已生成 {count} 个邀请码"
+    },
+    "createdTip": {
+      "en": "Send each code to one person. Codes are shown in the list below as well.",
+      "zh": "每个邀请码发给一个人；下面的列表里也能看到。"
+    },
+    "defaultRole": {
+      "en": "Default role",
+      "zh": "默认角色"
+    },
+    "delete": {
+      "en": "Delete",
+      "zh": "删除"
+    },
+    "deleteConfirm": {
+      "en": "Delete this invite code? Accounts already registered are not affected.",
+      "zh": "删除这个邀请码？已注册的账号不受影响。"
+    },
+    "enabled": {
+      "en": "Enabled",
+      "zh": "启用"
+    },
+    "expiresAt": {
+      "en": "Expires",
+      "zh": "过期时间"
+    },
+    "maxUses": {
+      "en": "Uses per code",
+      "zh": "每个可用次数"
+    },
+    "modeTip": {
+      "en": "Invite codes only take effect when REGISTER_MODE is set to invite.",
+      "zh": "只有把 REGISTER_MODE 设为 invite 时，注册才需要邀请码。"
+    },
+    "never": {
+      "en": "Never",
+      "zh": "不过期"
+    },
+    "note": {
+      "en": "Note",
+      "zh": "备注"
+    },
+    "role": {
+      "en": "Role",
+      "zh": "角色"
+    },
+    "usedBy": {
+      "en": "Used by",
+      "zh": "使用者"
+    },
+    "uses": {
+      "en": "Used",
+      "zh": "已用"
     }
   },
   "views.admin.RedeemCodes": {
@@ -1019,8 +1113,24 @@ export const MESSAGE_REGISTRY = {
   },
   "views.user.UserLogin": {
     "cannotForgotPassword": {
-      "en": "Mail verification is disabled or register is disabled, cannot reset password, please contact administrator",
-      "zh": "未开启邮箱验证或未开启注册功能，无法重置密码，请联系管理员"
+      "en": "Password reset by email is not available, please contact the administrator",
+      "zh": "暂不支持通过邮箱重设密码，请联系管理员"
+    },
+    "inviteCode": {
+      "en": "Invite code",
+      "zh": "邀请码"
+    },
+    "inviteCodePlaceholder": {
+      "en": "Ask the person who invited you",
+      "zh": "向邀请你的人索取"
+    },
+    "newPassword": {
+      "en": "New password",
+      "zh": "新密码"
+    },
+    "passwordResetDone": {
+      "en": "Password reset. All devices have been signed out, please log in again",
+      "zh": "密码已重设，所有设备都已退出，请重新登录"
     },
     "email": {
       "en": "Account Email",

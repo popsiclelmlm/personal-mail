@@ -13,12 +13,26 @@ export const CUSTOM_COLUMNS: CustomColumn[] = [
     { table: 'address', column: 'retention_type', ddl: `ALTER TABLE address ADD COLUMN retention_type TEXT DEFAULT 'temporary'` },
     { table: 'address', column: 'retention_until', ddl: `ALTER TABLE address ADD COLUMN retention_until DATETIME` },
     { table: 'address', column: 'is_permanent', ddl: `ALTER TABLE address ADD COLUMN is_permanent INTEGER DEFAULT 0` },
+    // 账号安全（db/2026-11-09-user-security.sql）
+    { table: 'users', column: 'token_version', ddl: `ALTER TABLE users ADD COLUMN token_version INTEGER DEFAULT 0` },
 ];
 
 // 列补齐之后执行，必须可重复执行（IF NOT EXISTS）
 export const CUSTOM_STATEMENTS: string[] = [
     `CREATE INDEX IF NOT EXISTS idx_address_is_permanent ON address(is_permanent)`,
+    `CREATE TABLE IF NOT EXISTS invite_codes (`
+    + ` id INTEGER PRIMARY KEY AUTOINCREMENT, code TEXT UNIQUE NOT NULL, role TEXT,`
+    + ` max_uses INTEGER NOT NULL DEFAULT 1, used_count INTEGER NOT NULL DEFAULT 0,`
+    + ` enabled INTEGER NOT NULL DEFAULT 1, note TEXT, expires_at DATETIME,`
+    + ` created_at DATETIME DEFAULT CURRENT_TIMESTAMP, updated_at DATETIME DEFAULT CURRENT_TIMESTAMP)`,
+    `CREATE TABLE IF NOT EXISTS invite_code_uses (`
+    + ` id INTEGER PRIMARY KEY AUTOINCREMENT, invite_code_id INTEGER NOT NULL, user_id INTEGER NOT NULL,`
+    + ` created_at DATETIME DEFAULT CURRENT_TIMESTAMP)`,
+    `CREATE INDEX IF NOT EXISTS idx_invite_code_uses_invite_code_id ON invite_code_uses(invite_code_id)`,
 ];
+
+// 本仓库新增的表，用来判断是否需要迁移
+export const CUSTOM_TABLES: string[] = ['invite_codes', 'invite_code_uses'];
 
 const getTableColumns = async (db: D1Database, table: string): Promise<Set<string>> => {
     const { results } = await db.prepare(`PRAGMA table_info(${table})`).all<{ name: string }>();
@@ -39,6 +53,18 @@ export const getMissingCustomColumns = async (db: D1Database): Promise<CustomCol
         }
     }
     return missing;
+};
+
+/** 是否还有没执行的自定义迁移（缺列或缺表） */
+export const hasPendingCustomMigrations = async (db: D1Database): Promise<boolean> => {
+    if ((await getMissingCustomColumns(db)).length > 0) return true;
+    for (const table of CUSTOM_TABLES) {
+        const exists = await db.prepare(
+            `SELECT name FROM sqlite_master WHERE type = 'table' AND name = ?`
+        ).bind(table).first('name');
+        if (!exists) return true;
+    }
+    return false;
 };
 
 /** 补齐自定义列并执行自定义语句；返回补了多少列 */

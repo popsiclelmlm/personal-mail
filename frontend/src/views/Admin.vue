@@ -31,6 +31,7 @@ import WorkerConfig from './admin/WorkerConfig.vue';
 import IpBlacklistSettings from './admin/IpBlacklistSettings.vue';
 import AiExtractSettings from './admin/AiExtractSettings.vue';
 import RedeemCodes from './admin/RedeemCodes.vue';
+import InviteCodes from './admin/InviteCodes.vue';
 
 const {
   adminAuth, showAdminAuth, adminTab, loading,
@@ -174,6 +175,9 @@ onMounted(async () => {
           </n-tab-pane>
           <n-tab-pane name="roleAddressConfig" :tab="t('roleAddressConfig')">
             <RoleAddressConfig />
+          </n-tab-pane>
+          <n-tab-pane name="inviteCodes" :tab="t('inviteCodes')">
+            <InviteCodes />
           </n-tab-pane>
         </n-tabs>
       </n-tab-pane>

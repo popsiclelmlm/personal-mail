@@ -24,7 +24,8 @@ const showModal = ref(false);
 const user = ref({
     email: "",
     password: "",
-    code: ""
+    code: "",
+    inviteCode: ""
 });
 const signupCfToken = ref("")
 const resetCfToken = ref("")
@@ -120,7 +121,8 @@ const emailSignup = async () => {
                 // hash password
                 password: await hashPassword(user.value.password),
                 code: user.value.code,
-                cf_token: showModal.value ? resetCfToken.value : signupCfToken.value
+                invite_code: user.value.inviteCode,
+                cf_token: signupCfToken.value
             }),
             message: message
         });
@@ -128,9 +130,36 @@ const emailSignup = async () => {
             tabValue.value = "signin";
             message.success(t('pleaseLogin'));
         }
-        showModal.value = false;
     } catch (error) {
         message.error(error.message || "register failed");
+    }
+};
+
+// 凭邮箱验证码重设密码；成功后所有设备都要重新登录
+const resetPassword = async () => {
+    if (!user.value.email || !user.value.password) {
+        message.error(t('pleaseInput'));
+        return;
+    }
+    if (!user.value.code) {
+        message.error(t('pleaseInputCode'));
+        return;
+    }
+    try {
+        await api.fetch(`/user_api/reset_password`, {
+            method: "POST",
+            body: JSON.stringify({
+                email: user.value.email,
+                password: await hashPassword(user.value.password),
+                code: user.value.code,
+            }),
+        });
+        showModal.value = false;
+        tabValue.value = "signin";
+        user.value.code = "";
+        message.success(t('passwordResetDone'));
+    } catch (error) {
+        message.error(error.message || "reset password failed");
     }
 };
 
@@ -222,6 +251,9 @@ onMounted(async () => {
                         <n-input v-model:value="user.password" type="password" show-password-on="click"
                             @keyup.enter="emailSignup" />
                     </n-form-item-row>
+                    <n-form-item-row v-if="userOpenSettings.registerMode === 'invite'" :label="t('inviteCode')" required>
+                        <n-input v-model:value="user.inviteCode" :placeholder="t('inviteCodePlaceholder')" />
+                    </n-form-item-row>
                     <Turnstile ref="signupTurnstileRef" v-if="userOpenSettings.enableMailVerify" v-model:value="signupCfToken" />
                     <n-form-item-row v-if="userOpenSettings.enableMailVerify" :label="t('verifyCode')" required>
                         <n-input-group>
@@ -241,13 +273,13 @@ onMounted(async () => {
             </n-tab-pane>
         </n-tabs>
         <n-modal v-model:show="showModal" style="max-width: 600px;" preset="card" :title="t('forgotPassword')">
-            <n-form v-if="userOpenSettings.enable && userOpenSettings.enableMailVerify">
+            <n-form v-if="userOpenSettings.enableResetPassword">
                 <n-form-item-row :label="t('email')" required>
                     <n-input v-model:value="user.email" />
                 </n-form-item-row>
-                <n-form-item-row :label="t('password')" required>
+                <n-form-item-row :label="t('newPassword')" required>
                     <n-input v-model:value="user.password" type="password" show-password-on="click"
-                        @keyup.enter="emailSignup" />
+                        @keyup.enter="resetPassword" />
                 </n-form-item-row>
                 <Turnstile ref="resetTurnstileRef" v-model:value="resetCfToken" />
                 <n-form-item-row :label="t('verifyCode')" required>
@@ -260,7 +292,7 @@ onMounted(async () => {
                         </n-button>
                     </n-input-group>
                 </n-form-item-row>
-                <n-button @click="emailSignup" type="primary" block secondary strong>
+                <n-button @click="resetPassword" type="primary" block secondary strong>
                     {{ t('resetPassword') }}
                 </n-button>
             </n-form>

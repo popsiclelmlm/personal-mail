@@ -8,6 +8,7 @@ import {
 } from '@simplewebauthn/server';
 
 import { Passkey } from '../models';
+import { signUserToken } from './user_token';
 import type { PublicKeyCredentialRequestOptionsJSON } from '@simplewebauthn/server';
 import { isoBase64URL } from '@simplewebauthn/server/helpers';
 import i18n from '../i18n';
@@ -194,14 +195,8 @@ export default {
         if (!user_email) {
             return c.text(msgs.UserNotFoundMsg, 404);
         }
-        // create jwt
-        const jwt = await Jwt.sign({
-            user_email: user_email,
-            user_id: user_id,
-            // 90 days expire in seconds
-            exp: Math.floor(Date.now() / 1000) + 30 * 24 * 60 * 60,
-            iat: Math.floor(Date.now() / 1000),
-        }, c.env.JWT_SECRET, "HS256")
+        // create jwt（带令牌版本 tv）
+        const jwt = await signUserToken(c, { user_id: Number(user_id), user_email });
         return c.json({
             jwt: jwt
         })

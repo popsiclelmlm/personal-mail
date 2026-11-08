@@ -5,10 +5,19 @@
 //   2. cd worker && pnpm exec wrangler dev --port 8797 --test-scheduled
 //   3. node scripts/personal-mail/local-verify.mjs [phase1|phase2|phase3|all]
 // 每次运行都用新的随机名字，可以对同一个本地数据库重复执行。
-import { createHash, randomBytes } from 'node:crypto';
+import { execFileSync } from 'node:child_process';
+import { createHash, createHmac, randomBytes } from 'node:crypto';
+import { fileURLToPath } from 'node:url';
 
 const BASE = process.env.VERIFY_BASE_URL || 'http://127.0.0.1:8797';
 const ADMIN_PASSWORD = process.env.VERIFY_ADMIN_PASSWORD || 'local-admin-pass';
+const JWT_SECRET = process.env.VERIFY_JWT_SECRET || 'local-test-secret-key';
+// 本地 SMTP 收信器（scripts/personal-mail/smtp-sink.mjs）的 HTTP 地址
+const SMTP_SINK = process.env.VERIFY_SMTP_SINK || 'http://127.0.0.1:1080';
+// wrangler dev 的 --persist-to 目录；设置后脚本会直接查本地 D1 核对数据库内容
+const D1_PERSIST = process.env.VERIFY_D1_PERSIST || '';
+const WORKER_DIR = fileURLToPath(new URL('../../worker/', import.meta.url));
+const VERIFY_SENDER = 'noreply@personal.test';
 const RUN_ID = randomBytes(3).toString('hex');
 
 let passed = 0;
@@ -187,7 +196,209 @@ const phase1 = async () => {
     return { token, email, ids, inboxAddress };
 };
 
-const phases = { phase1 };
+
+// 直接查本地 D1（需要 VERIFY_D1_PERSIST）；没配置时返回 null，相关检查跳过
+const sql = (query) => {
+    if (!D1_PERSIST) return null;
+    const output = execFileSync('pnpm', [
+        'exec', 'wrangler', 'd1', 'execute', 'DB', '--local', '--persist-to', D1_PERSIST, '--json', '--command', query,
+    ], { cwd: WORKER_DIR, encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] });
+    return JSON.parse(output)[0].results;
+};
+
+const signJwt = (payload) => {
+    const header = Buffer.from(JSON.stringify({ alg: 'HS256', typ: 'JWT' })).toString('base64url');
+    const body = Buffer.from(JSON.stringify(payload)).toString('base64url');
+    const signature = createHmac('sha256', JWT_SECRET).update(`${header}.${body}`).digest('base64url');
+    return `${header}.${body}.${signature}`;
+};
+
+const sinkMessages = async () => (await fetch(`${SMTP_SINK}/messages`)).json();
+
+// 发验证码并从本地收信器里取出来
+const latestCodeFor = (messages, email) => messages
+    .filter((item) => item.to.includes(email))
+    .map((item) => item.data.match(/verify code is (\d{6})/)?.[1])
+    .filter(Boolean)
+    .at(-1);
+
+const requestVerifyCode = async (email, ip = randomIp()) => {
+    const before = (await sinkMessages()).length;
+    const res = await call('POST', '/user_api/verify_code', { body: { email }, headers: { 'cf-connecting-ip': ip } });
+    // 上游规定 5 分钟内不能重发；上一个验证码还有效时直接用它
+    if (res.status === 400 && /already sent/i.test(res.text)) {
+        const code = latestCodeFor(await sinkMessages(), email);
+        if (code) return code;
+    }
+    if (res.status !== 200) throw new Error(`verify_code failed: ${res.text}`);
+    for (let i = 0; i < 20; i++) {
+        const code = latestCodeFor((await sinkMessages()).slice(before), email);
+        if (code) return code;
+        await sleep(250);
+    }
+    throw new Error(`verify code for ${email} not received`);
+};
+
+const setupMailVerify = async () => {
+    const userSettings = await call('POST', '/admin/user_settings', {
+        body: { enable: true, enableMailVerify: true, verifyMailSender: VERIFY_SENDER, maxAddressCount: 10 },
+        headers: admin,
+    });
+    if (userSettings.status !== 200) throw new Error(`user settings failed: ${userSettings.text}`);
+    const account = await call('GET', '/admin/account_settings', { headers: admin });
+    const saved = await call('POST', '/admin/account_settings', {
+        body: { ...account.data, noLimitSendAddressList: [VERIFY_SENDER] },
+        headers: admin,
+    });
+    if (saved.status !== 200) throw new Error(`account settings failed: ${saved.text}`);
+};
+
+const createInvites = async (body) => {
+    const res = await call('POST', '/admin/invite_codes', { body, headers: admin });
+    if (res.status !== 200) throw new Error(`create invites failed: ${res.text}`);
+    return res.data.codes;
+};
+
+const registerUser = async ({ email, password, invite, ip = randomIp() }) => {
+    const code = await requestVerifyCode(email, ip);
+    return call('POST', '/user_api/register', {
+        body: { email, password: sha256(password), code, invite_code: invite },
+        headers: { 'cf-connecting-ip': ip },
+    });
+};
+
+const phase2 = async () => {
+    console.log('phase 2: account security');
+    await setupMailVerify();
+    const open = await call('GET', '/user_api/open_settings');
+    check('open settings expose invite mode and password reset', open.data.registerMode === 'invite'
+        && open.data.enable === true && open.data.enableResetPassword === true, open.data);
+
+    // 邀请制注册
+    const email = `invitee${RUN_ID}@outside.test`;
+    const noInvite = await call('POST', '/user_api/register', {
+        body: { email, password: sha256('pw-1'), code: '000000' },
+    });
+    check('register without an invite code is rejected', noInvite.status === 400, noInvite);
+    const badInvite = await call('POST', '/user_api/register', {
+        body: { email, password: sha256('pw-1'), code: '000000', invite_code: 'NOPE-NOPE-NOPE' },
+    });
+    check('register with an invalid invite code is rejected', badInvite.status === 400, badInvite);
+    const [invite, spareInvite] = await createInvites({ count: 2, max_uses: 1 });
+    check('admin creates invite codes', /^[A-Z0-9]{12}$/.test(invite), invite);
+    const formatted = invite.replace(/(.{4})(?=.)/g, '$1-').toLowerCase();
+    const registered = await registerUser({ email, password: 'pw-1', invite: formatted });
+    check('register with a valid invite code (any case, with dashes)', registered.status === 200, registered);
+    const reused = await registerUser({ email: `second${RUN_ID}@outside.test`, password: 'pw-1', invite });
+    check('a single-use invite cannot be used twice', reused.status === 400, reused);
+    const duplicate = await registerUser({ email, password: 'pw-2', invite: spareInvite });
+    check('registering an existing email does not overwrite it', duplicate.status === 400, duplicate);
+    const list = await call('GET', '/admin/invite_codes?limit=20&offset=0', { headers: admin });
+    const used = list.data.results.find((row) => row.code === invite);
+    const spare = list.data.results.find((row) => row.code === spareInvite);
+    check('invite usage is recorded and rolled back on failure', used?.used_count === 1 && used?.used_by === email
+        && spare?.used_count === 0, [used, spare]);
+
+    const logged = await login(email, 'pw-1');
+    check('invited user logs in', logged.status === 200, logged);
+    const token = logged.data.jwt;
+    const settings = await call('GET', '/user_api/settings', { headers: userHeaders(token) });
+    check('invited user gets the member role', settings.data.user_role?.role === 'member', settings.data);
+    const personal = await createAddress(`inv${RUN_ID}`, 'personal.test', { token });
+    check('member can create an address on the personal domain', personal.status === 200, personal);
+    const tokenPayload = JSON.parse(Buffer.from(token.split('.')[1], 'base64url'));
+    check('user token carries tv and lasts 7 days', tokenPayload.tv === 0
+        && Math.abs(tokenPayload.exp - tokenPayload.iat - 7 * 86400) < 5, tokenPayload);
+
+    const stored = sql(`SELECT password FROM users WHERE user_email = '${email}'`);
+    if (stored) {
+        check('password is stored as pbkdf2, not hex', /^pbkdf2\$sha256\$100000\$/.test(stored[0].password), stored[0].password);
+    }
+
+    // 老格式密码：登录后自动升级
+    if (D1_PERSIST) {
+        const legacyEmail = `legacy${RUN_ID}@outside.test`;
+        sql(`INSERT INTO users (user_email, password) VALUES ('${legacyEmail}', '${sha256('legacy-pw')}')`);
+        const legacyLogin = await login(legacyEmail, 'legacy-pw');
+        const upgraded = sql(`SELECT password FROM users WHERE user_email = '${legacyEmail}'`)[0].password;
+        check('legacy hex password logs in and is upgraded', legacyLogin.status === 200 && upgraded.startsWith('pbkdf2$'), [legacyLogin.status, upgraded]);
+        const hexAsPassword = await call('POST', '/user_api/login', { body: { email: legacyEmail, password: upgraded } });
+        check('the stored hash itself cannot be used to log in', hexAsPassword.status === 400, hexAsPassword);
+    }
+
+    // 登录失败锁定
+    const lockIp = randomIp();
+    const wrong = [];
+    for (let i = 0; i < 5; i++) wrong.push((await login(email, 'wrong', lockIp)).status);
+    const lockedRight = await login(email, 'pw-1', lockIp);
+    check('five wrong passwords lock the IP + email', wrong.slice(0, 4).every((s) => s === 400) && wrong[4] === 429
+        && lockedRight.status === 429, [...wrong, lockedRight.status]);
+    const otherIp = await login(email, 'pw-1');
+    check('other IPs are not locked', otherIp.status === 200, otherIp);
+    const unknownUser = await login(`nobody${RUN_ID}@outside.test`, 'x');
+    const wrongPassword = await login(email, 'wrong');
+    check('unknown user gets the same error as a wrong password', unknownUser.status === 400
+        && unknownUser.text === wrongPassword.text, [unknownUser.text, wrongPassword.text]);
+
+    // 退出所有设备
+    const second = (await login(email, 'pw-1')).data.jwt;
+    const legacyToken = signJwt({ user_email: email, user_id: tokenPayload.user_id, exp: Math.floor(Date.now() / 1000) + 3600 });
+    const legacyOk = await call('GET', '/user_api/settings', { headers: userHeaders(legacyToken) });
+    check('old tokens without tv still work while the version is 0', legacyOk.status === 200, legacyOk.status);
+    const logoutAll = await call('POST', '/user_api/logout_all', { headers: userHeaders(token) });
+    const afterA = await call('GET', '/user_api/settings', { headers: userHeaders(token) });
+    const afterB = await call('GET', '/user_api/settings', { headers: userHeaders(second) });
+    const afterLegacy = await call('GET', '/user_api/settings', { headers: userHeaders(legacyToken) });
+    check('logout_all revokes every token', logoutAll.status === 200 && afterA.status === 401
+        && afterB.status === 401 && afterLegacy.status === 401, [logoutAll.status, afterA.status, afterB.status, afterLegacy.status]);
+    const revokedCreate = await createAddress(`rv${RUN_ID}`, 'personal.test', { token });
+    check('a revoked token is treated as anonymous when creating addresses', revokedCreate.status === 400, revokedCreate);
+
+    // 重设密码
+    const fresh = (await login(email, 'pw-1')).data.jwt;
+    const resetIp = randomIp();
+    const wrongCodes = [];
+    await requestVerifyCode(email, resetIp);
+    for (let i = 0; i < 5; i++) {
+        wrongCodes.push((await call('POST', '/user_api/reset_password', {
+            body: { email, code: '000000', password: sha256('pw-x') }, headers: { 'cf-connecting-ip': resetIp },
+        })).status);
+    }
+    check('five wrong verify codes lock reset_password', wrongCodes.slice(0, 4).every((s) => s === 400) && wrongCodes[4] === 429, wrongCodes);
+    const code = await requestVerifyCode(email);
+    const sinkBefore = (await sinkMessages()).length;
+    const reset = await call('POST', '/user_api/reset_password', { body: { email, code, password: sha256('pw-new') } });
+    check('reset_password with the code succeeds', reset.status === 200, reset);
+    const oldToken = await call('GET', '/user_api/settings', { headers: userHeaders(fresh) });
+    check('reset_password signs out existing sessions', oldToken.status === 401, oldToken.status);
+    check('old password no longer works', (await login(email, 'pw-1')).status === 400);
+    check('new password works', (await login(email, 'pw-new')).status === 200);
+    const reuseCode = await call('POST', '/user_api/reset_password', { body: { email, code, password: sha256('pw-again') } });
+    check('a verify code cannot be reused', reuseCode.status === 400, reuseCode);
+    await sleep(500);
+    const notice = (await sinkMessages()).slice(sinkBefore).find((item) => item.to.includes(email));
+    check('a reset notification is mailed to the account', !!notice && /password was reset|密码已重设|=E5=AF=86/.test(notice.data), notice?.data?.slice(0, 200));
+
+    // 管理员建用户、重设密码
+    const adminEmail = `byadmin${RUN_ID}@outside.test`;
+    await adminCreateUser(adminEmail, 'admin-made', 'member');
+    const adminUserToken = (await login(adminEmail, 'admin-made')).data.jwt;
+    const adminUser = (await call('GET', `/admin/users?limit=5&offset=0&query=${encodeURIComponent(adminEmail)}`, { headers: admin })).data.results[0];
+    const adminReset = await call('POST', `/admin/users/${adminUser.id}/reset_password`, { body: { password: sha256('admin-reset') }, headers: admin });
+    const afterAdminReset = await call('GET', '/user_api/settings', { headers: userHeaders(adminUserToken) });
+    check('admin password reset revokes the user tokens', adminReset.status === 200 && afterAdminReset.status === 401, [adminReset.status, afterAdminReset.status]);
+    const adminStored = sql(`SELECT password FROM users WHERE user_email = '${adminEmail}'`);
+    if (adminStored) {
+        check('admin-set passwords are stored as pbkdf2', adminStored[0].password.startsWith('pbkdf2$'), adminStored[0].password);
+    }
+    if (D1_PERSIST) {
+        const hex = sql(`SELECT COUNT(*) AS n FROM users WHERE password GLOB '[0-9a-f]*' AND length(password) = 64 AND user_email LIKE '%${RUN_ID}%'`);
+        check('no new 64-character hex passwords in the database', hex[0].n === 0, hex);
+    }
+    return { email, password: 'pw-new' };
+};
+
+const phases = { phase1, phase2 };
 
 const main = async () => {
     const target = process.argv[2] || 'all';

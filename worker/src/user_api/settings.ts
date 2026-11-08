@@ -6,6 +6,9 @@ import { getJsonSetting, getMaxAddressCount } from "../utils"
 import { CONSTANTS } from "../constants";
 import { commonGetUserRole, updateUserAddressesUpdatedAt } from "../common";
 import { Jwt } from "hono/utils/jwt";
+import { USER_TOKEN_REFRESH_WITHIN_SECONDS } from "../auth_version";
+import { resolveRegisterMode } from "./invite";
+import { signUserToken } from "./user_token";
 
 export default {
     openSettings: async (c: Context<HonoCustomType>) => {
@@ -24,10 +27,14 @@ export default {
         } catch (e) {
             console.error("Failed to get oauth2 settings", e);
         }
+        const registerMode = resolveRegisterMode(c.env.REGISTER_MODE);
         return c.json({
-            enable: settings.enable,
+            enable: settings.enable && registerMode !== 'closed',
             enableMailVerify: settings.enableMailVerify,
             oauth2ClientIDs: oauth2ClientIDs,
+            registerMode: registerMode,
+            // 重设密码要靠邮箱验证码
+            enableResetPassword: !!(settings.enableMailVerify && settings.verifyMailSender && c.env.KV),
         })
     },
     settings: async (c: Context<HonoCustomType>) => {
@@ -54,16 +61,12 @@ export default {
             // 1 hour
             exp: Math.floor(Date.now() / 1000) + 3600,
         }, c.env.JWT_SECRET, "HS256") : null;
-        // create new if expired in 7 days
+        // 剩余有效期不足 4 天时换发新令牌（令牌有效期 7 天，滑动续期）；沿用当前的令牌版本
         const new_user_token = user.exp > (
-            Math.floor(Date.now() / 1000) + 7 * 24 * 60 * 60
-        ) ? null : await Jwt.sign({
-            user_email: user.user_email,
-            user_id: user.user_id,
-            // 30 days expire in seconds
-            exp: Math.floor(Date.now() / 1000) + 30 * 24 * 60 * 60,
-            iat: Math.floor(Date.now() / 1000),
-        }, c.env.JWT_SECRET, "HS256");
+            Math.floor(Date.now() / 1000) + USER_TOKEN_REFRESH_WITHIN_SECONDS
+        ) ? null : await signUserToken(c, {
+            user_id: user.user_id, user_email: user.user_email,
+        });
         updateUserAddressesUpdatedAt(c, user.user_id);
         // 地址额度：已绑定数、上限、永久邮箱数与上限，只在设置页展示
         const quota = await c.env.DB.prepare(

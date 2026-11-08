@@ -19,6 +19,7 @@ import ip_blacklist_settings from './ip_blacklist_settings'
 import ai_extract_settings from './ai_extract_settings'
 import config_api from './config_api'
 import redeem_code_api from '../redeem_api/admin_redeem_code_api'
+import invite_codes_api from './invite_codes_api'
 
 export const api = new Hono<HonoCustomType>()
 
@@ -110,6 +111,12 @@ api.get('/admin/redeem_codes/export', redeem_code_api.exportRedeemCodes)
 api.post('/admin/redeem_codes/batch', redeem_code_api.createRedeemCodes)
 api.put('/admin/redeem_codes/:id', redeem_code_api.updateRedeemCode)
 api.delete('/admin/redeem_codes/:id', redeem_code_api.deleteRedeemCode)
+
+// invite codes（REGISTER_MODE = invite 时注册用）
+api.get('/admin/invite_codes', invite_codes_api.listInviteCodes)
+api.post('/admin/invite_codes', invite_codes_api.createInviteCodes)
+api.put('/admin/invite_codes/:id', invite_codes_api.updateInviteCode)
+api.delete('/admin/invite_codes/:id', invite_codes_api.deleteInviteCode)
 
 // IP blacklist settings
 api.get('/admin/ip_blacklist/settings', ip_blacklist_settings.getIpBlacklistSettings)

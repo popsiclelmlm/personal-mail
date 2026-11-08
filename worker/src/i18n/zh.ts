@@ -194,6 +194,12 @@ const messages: LocaleMessages = {
     IpDomainMaxAddressCountReachedMsg: "该 IP 在此域名下创建的邮箱数量已达上限",
     InvalidRetentionTypeMsg: "无效的保留类型",
     PermanentQuotaExceededMsg: "永久邮箱额度已用完",
+    InviteCodeRequiredMsg: "注册需要邀请码",
+    InviteCodeInvalidMsg: "邀请码无效、已过期或已用完",
+    TooManyAttemptsMsg: "失败次数过多，请 15 分钟后再试",
+    ResetPasswordNotAvailableMsg: "暂不支持重设密码，请联系管理员",
+    PasswordResetMailSubjectMsg: "你的 Free Temp Mail 密码已重设",
+    PasswordResetMailContentMsg: "你的 Free Temp Mail 账号密码刚刚被重设，所有设备都已退出登录。如果不是你本人操作，请立即再次重设密码并联系管理员。",
 }
 
 export default messages;

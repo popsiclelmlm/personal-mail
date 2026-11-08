@@ -18,6 +18,7 @@ import { email } from './email';
 import { scheduled } from './scheduled';
 import { getPasswords, getBooleanValue, getDomains, checkIsAdmin, getEnvStringList } from './utils';
 import { checkAccessControl } from './ip_blacklist';
+import { isUserTokenCurrent } from './user_api/user_token';
 
 const API_PATHS = [
 	"/api/",
@@ -74,6 +75,8 @@ app.use('/*', async (c, next) => {
 		|| (c.req.path.startsWith("/user_api/address/") && c.req.path.endsWith("/send_mail"))
 		|| c.req.path.startsWith("/user_api/register")
 		|| c.req.path.startsWith("/user_api/verify_code")
+		|| c.req.path.startsWith("/user_api/login")
+		|| c.req.path.startsWith("/user_api/reset_password")
 		|| c.req.path.startsWith("/redeem_api/")
 	) {
 		const reqIp = c.req.raw.headers.get("cf-connecting-ip")
@@ -126,6 +129,8 @@ const checkUserPayload = async (
 		if (payload.exp < Math.floor(Date.now() / 1000)) {
 			return;
 		}
+		// 令牌版本过期（改过密码或退出了所有设备）时当作未登录
+		if (!await isUserTokenCurrent(c, payload)) return;
 		c.set("userPayload", payload as UserPayload);
 	} catch (e) {
 		console.error(e);
@@ -191,6 +196,7 @@ app.use('/user_api/*', async (c, next) => {
 		|| c.req.path.startsWith("/user_api/register")
 		|| c.req.path.startsWith("/user_api/login")
 		|| c.req.path.startsWith("/user_api/verify_code")
+		|| c.req.path.startsWith("/user_api/reset_password")
 		|| c.req.path.startsWith("/user_api/passkey/authenticate_")
 		|| c.req.path.startsWith("/user_api/oauth2")
 	) {
@@ -209,6 +215,10 @@ app.use('/user_api/*', async (c, next) => {
 		if (!payload.exp) return c.text(msgs.UserTokenExpiredMsg, 401);
 		// exp is in seconds
 		if (payload.exp < Math.floor(Date.now() / 1000)) {
+			return c.text(msgs.UserTokenExpiredMsg, 401)
+		}
+		// 令牌版本校验：改过密码、重设密码、退出所有设备之后旧令牌返回 401
+		if (!await isUserTokenCurrent(c, payload)) {
 			return c.text(msgs.UserTokenExpiredMsg, 401)
 		}
 		c.set("userPayload", payload as UserPayload);

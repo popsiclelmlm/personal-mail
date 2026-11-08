@@ -6,6 +6,7 @@ import { UserSettings, GeoData, UserInfo, RoleAddressConfig } from "../models";
 import { handleListQuery } from '../common'
 import UserBindAddressModule from '../user_api/bind_address';
 import i18n from '../i18n';
+import { hashUserPassword, resolvePbkdf2Iterations } from '../user_api/password';
 
 export default {
     getSetting: async (c: Context<HonoCustomType>) => {
@@ -78,11 +79,15 @@ export default {
         const userInfo = new UserInfo(geoData, email);
         try {
             checkUserPassword(password);
+            // password 是前端的 SHA-256 摘要，服务端再做 PBKDF2 后入库
+            const passwordHash = await hashUserPassword(
+                password, resolvePbkdf2Iterations(c.env.PASSWORD_PBKDF2_ITERATIONS)
+            );
             const { success } = await c.env.DB.prepare(
                 `INSERT INTO users (user_email, password, user_info)`
                 + ` VALUES (?, ?, ?)`
             ).bind(
-                email, password, JSON.stringify(userInfo)
+                email, passwordHash, JSON.stringify(userInfo)
             ).run();
             if (!success) {
                 return c.text(msgs.FailedToRegisterMsg, 500)
@@ -118,9 +123,14 @@ export default {
         if (!user_id) return c.text(msgs.UserNotFoundMsg, 400);
         try {
             checkUserPassword(password);
+            const passwordHash = await hashUserPassword(
+                password, resolvePbkdf2Iterations(c.env.PASSWORD_PBKDF2_ITERATIONS)
+            );
+            // 重设密码后令牌版本加 1，该用户所有已登录的设备都要重新登录
             const { success } = await c.env.DB.prepare(
-                `UPDATE users SET password = ? WHERE id = ?`
-            ).bind(password, user_id).run();
+                `UPDATE users SET password = ?, token_version = COALESCE(token_version, 0) + 1,`
+                + ` updated_at = datetime('now') WHERE id = ?`
+            ).bind(passwordHash, user_id).run();
             if (!success) {
                 return c.text(msgs.FailedUpdatePasswordMsg, 500)
             }

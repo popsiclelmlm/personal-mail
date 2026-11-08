@@ -113,6 +113,10 @@ export const useGlobalState = createGlobalState(
             enableMailVerify: false,
             /** @type {{ clientID: string, name: string, icon?: string }[]} */
             oauth2ClientIDs: [],
+            /** 注册策略：open / invite / closed */
+            registerMode: 'open',
+            /** 是否可以凭邮箱验证码重设密码 */
+            enableResetPassword: false,
         });
         const userSettings = ref({
             /** @type {boolean} */

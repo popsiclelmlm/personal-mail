@@ -88,11 +88,34 @@ CREATE TABLE IF NOT EXISTS users (
     user_email TEXT UNIQUE NOT NULL,
     password TEXT NOT NULL,
     user_info TEXT,
+    token_version INTEGER DEFAULT 0,
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
     updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
 );
 
 CREATE INDEX IF NOT EXISTS idx_users_user_email ON users(user_email);
+
+CREATE TABLE IF NOT EXISTS invite_codes (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    code TEXT UNIQUE NOT NULL,
+    role TEXT,
+    max_uses INTEGER NOT NULL DEFAULT 1,
+    used_count INTEGER NOT NULL DEFAULT 0,
+    enabled INTEGER NOT NULL DEFAULT 1,
+    note TEXT,
+    expires_at DATETIME,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS invite_code_uses (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    invite_code_id INTEGER NOT NULL,
+    user_id INTEGER NOT NULL,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX IF NOT EXISTS idx_invite_code_uses_invite_code_id ON invite_code_uses(invite_code_id);
 
 CREATE TABLE IF NOT EXISTS users_address (
     id INTEGER PRIMARY KEY,

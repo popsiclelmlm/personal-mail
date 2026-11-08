@@ -1,10 +1,11 @@
 import { Context } from 'hono';
-import { Jwt } from 'hono/utils/jwt'
 
 import i18n from '../i18n';
 import { getJsonSetting, getMailDomain, getStringValue, getUserRoles, includesDomain } from '../utils';
 import { UserOauth2Settings } from '../models';
 import { CONSTANTS } from '../constants';
+import { signUserToken } from './user_token';
+import { resolveRegisterMode } from './invite';
 
 
 export default {
@@ -111,6 +112,15 @@ export default {
         if (setting.enableMailAllowList && !includesDomain(setting.mailAllowList, mailDomain)) {
             return c.text(`${msgs.UserMailDomainMustInMsg} ${JSON.stringify(setting.mailAllowList, null, 2)}`, 400)
         }
+        // 邀请制或关闭注册时，OAuth2 只能登录已有账号，不能借此绕过邀请码新建账号
+        if (resolveRegisterMode(c.env.REGISTER_MODE) !== 'open') {
+            const existing = await c.env.DB.prepare(
+                `SELECT id FROM users where user_email = ?`
+            ).bind(email).first("id");
+            if (!existing) {
+                return c.text(msgs.UserRegistrationDisabledMsg, 403);
+            }
+        }
         // insert or update user
         const { success } = await c.env.DB.prepare(
             `INSERT INTO users (user_email, password, user_info)`
@@ -145,14 +155,8 @@ export default {
                 return c.text(msgs.FailedUpdateUserDefaultRoleMsg, 500);
             }
         }
-        // create jwt
-        const jwt = await Jwt.sign({
-            user_email: email,
-            user_id: user_id,
-            // 90 days expire in seconds
-            exp: Math.floor(Date.now() / 1000) + 30 * 24 * 60 * 60,
-            iat: Math.floor(Date.now() / 1000),
-        }, c.env.JWT_SECRET, "HS256")
+        // create jwt（带令牌版本 tv）
+        const jwt = await signUserToken(c, { user_id: Number(user_id), user_email: email });
         return c.json({
             jwt: jwt
         })
