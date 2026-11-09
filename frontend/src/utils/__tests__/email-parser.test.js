@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { processItem } from '../email-parser';
+import { processItem, safeAttachmentMimeType } from '../email-parser';
 
 vi.mock('mail-parser-wasm', () => ({
     parse_message: () => { throw new Error('Exercise the PostalMime fallback'); },
@@ -57,5 +57,60 @@ describe('PostalMime fallback', () => {
         expect(new Uint8Array(await item.attachments[0].blob.arrayBuffer())).toEqual(new Uint8Array(binary));
         expect(await item.attachments[1].blob.text()).toBe(attachedMail);
         expect(item.attachments[0].blob.type).toBe('image/png');
+    });
+});
+
+// 附件 blob: 链接和网站同源，可执行的类型不能原样生成 blob（否则点开附件就以本站身份跑脚本）
+describe('attachment blob types', () => {
+    it.each([
+        ['text/html', 'application/octet-stream'],
+        ['TEXT/HTML; charset=utf-8', 'application/octet-stream'],
+        ['application/xhtml+xml', 'application/octet-stream'],
+        ['image/svg+xml', 'application/octet-stream'],
+        ['text/xml', 'application/octet-stream'],
+        ['application/xml', 'application/octet-stream'],
+        ['application/javascript', 'application/octet-stream'],
+        ['text/javascript', 'application/octet-stream'],
+        ['multipart/related', 'application/octet-stream'],
+        ['message/rfc822', 'application/octet-stream'],
+        ['application/vnd.ms-excel', 'application/octet-stream'],
+        ['', 'application/octet-stream'],
+        [undefined, 'application/octet-stream'],
+        ['image/png', 'image/png'],
+        ['IMAGE/JPEG', 'image/jpeg'],
+        ['image/gif; name="a.gif"', 'image/gif'],
+        ['application/pdf', 'application/pdf'],
+        ['audio/mpeg', 'audio/mpeg'],
+        ['video/mp4', 'video/mp4'],
+        ['text/plain', 'text/plain'],
+        ['text/plain; charset="GB2312"', 'text/plain;charset=gb2312'],
+        ['text/plain; charset=<script>', 'text/plain'],
+    ])('%s -> %s', (declared, expected) => {
+        expect(safeAttachmentMimeType(declared)).toBe(expected);
+    });
+
+    it('turns an HTML attachment linked from the body into a download, keeping inline images', async () => {
+        const html = '<script>alert(document.domain)</script>';
+        const raw = [
+            'From: Sender <first@example.com>', 'Subject: Invoice',
+            'MIME-Version: 1.0', 'Content-Type: multipart/mixed; boundary=test', '',
+            '--test', 'Content-Type: text/html; charset=utf-8', '', '<a href="cid:preview">Preview</a>',
+            '--test', 'Content-Type: text/html', 'Content-ID: preview',
+            'Content-Disposition: attachment; filename="preview.html"', '', html,
+            '--test', 'Content-Type: image/svg+xml', 'Content-Disposition: attachment; filename="logo.svg"', '',
+            '<svg xmlns="http://www.w3.org/2000/svg" onload="alert(1)"/>',
+            '--test', 'Content-Type: image/png', 'Content-Disposition: inline; filename="a.png"',
+            'Content-Transfer-Encoding: base64', '', Buffer.from([1, 2, 3]).toString('base64'),
+            '--test--',
+        ].join('\r\n');
+        const item = await processItem({ raw, source: 'bounce@transport.example' });
+        expect(item.attachments.map(file => [file.filename, file.blob.type])).toEqual([
+            ['preview.html', 'application/octet-stream'],
+            ['logo.svg', 'application/octet-stream'],
+            ['a.png', 'image/png'],
+        ]);
+        // 内容不变，只是不会在浏览器里当网页打开
+        expect(await item.attachments[0].blob.text()).toBe(html);
+        expect(item.message).toContain('href="blob:attachment"');
     });
 });

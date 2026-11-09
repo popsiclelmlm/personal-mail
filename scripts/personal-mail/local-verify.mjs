@@ -3,7 +3,7 @@
 // 用法：
 //   1. cp scripts/personal-mail/wrangler.local.toml worker/wrangler.toml
 //   2. cd worker && pnpm exec wrangler dev --port 8797 --test-scheduled
-//   3. node scripts/personal-mail/local-verify.mjs [phase1|phase2|phase3|phase4|phase5|admin|all]
+//   3. node scripts/personal-mail/local-verify.mjs [phase1|phase2|phase3|phase4|phase5|admin|tokens|all]
 // 每次运行都用新的随机名字，可以对同一个本地数据库重复执行。
 import { execFileSync } from 'node:child_process';
 import { existsSync } from 'node:fs';
@@ -853,7 +853,63 @@ const phaseAdmin = async () => {
     check('the plain password is unaffected by logout_all', (await adminGet(ADMIN_PASSWORD)).status === 200);
 };
 
-const phases = { phase1, phase2, phase3, phase4, phase5, admin: phaseAdmin };
+// 角色令牌和用户令牌：撤销管理员角色、退出所有设备后旧角色令牌立即失效；删除账号后编号被复用，旧令牌不能进入新账号
+const phaseTokens = async () => {
+    console.log('account and role tokens');
+    const email = `rtk${RUN_ID}@example.test`;
+    const user = await adminCreateUser(email, 'rtk-pw', 'admin');
+    const token = (await login(email, 'rtk-pw')).data.jwt;
+    const roleToken = async () => (await call('GET', '/user_api/settings', { headers: userHeaders(token) })).data;
+    const asRole = (access) => call('GET', '/admin/worker/configs', {
+        headers: { ...userHeaders(token), ...(access ? { 'x-user-access-token': access } : {}) },
+    });
+    const first = await roleToken();
+    check('an admin-role user gets a role token with tv', first.is_admin === true
+        && decodeAdminJwt(first.access_token).tv === 0 && decodeAdminJwt(first.access_token).user_role === 'admin', first);
+    check('the role token opens the admin API', (await asRole(first.access_token)).status === 200);
+
+    await call('POST', '/admin/user_roles', { body: { user_id: user.id, role_text: 'member' }, headers: admin });
+    const demoted = await asRole(first.access_token);
+    check('after demotion the old role token is refused at once (frontend refreshes it)',
+        demoted.status === 401 && demoted.data.code === 'AUTH_USER_ACCESS_TOKEN_EXPIRED', demoted);
+    const member = await roleToken();
+    const asMember = await asRole(member.access_token);
+    check('the refreshed role token no longer grants admin', member.is_admin === false
+        && asMember.status === 401 && asMember.data.code === 'AUTH_ADMIN_CREDENTIAL_INVALID', asMember);
+
+    await call('POST', '/admin/user_roles', { body: { user_id: user.id, role_text: '' }, headers: admin });
+    check('removing the role also refuses the old role token', (await asRole(member.access_token)).status === 401);
+
+    await call('POST', '/admin/user_roles', { body: { user_id: user.id, role_text: 'admin' }, headers: admin });
+    const again = await roleToken();
+    check('restoring the role works with a fresh role token', (await asRole(again.access_token)).status === 200);
+    await call('POST', '/user_api/logout_all', { headers: userHeaders(token) });
+    const afterLogoutAll = await asRole(again.access_token);
+    check('"log out everywhere" also kills the role token',
+        afterLogoutAll.status === 401 && afterLogoutAll.data.code === 'AUTH_USER_ACCESS_TOKEN_EXPIRED', afterLogoutAll);
+
+    // 删除最新的账号后，新账号会复用它的编号
+    const oldEmail = `reuse${RUN_ID}@example.test`;
+    const oldUser = await adminCreateUser(oldEmail, 'reuse-pw', 'admin');
+    const oldToken = (await login(oldEmail, 'reuse-pw')).data.jwt;
+    const oldAccess = (await call('GET', '/user_api/settings', { headers: userHeaders(oldToken) })).data.access_token;
+    check('the soon-deleted account works before deletion',
+        (await call('GET', '/user_api/settings', { headers: userHeaders(oldToken) })).status === 200);
+    const deleted = await call('DELETE', `/admin/users/${oldUser.id}`, { headers: admin });
+    const newUser = await adminCreateUser(`newc${RUN_ID}@example.test`, 'newc-pw', 'admin');
+    check('the new account reuses the deleted id', deleted.status === 200 && newUser.id === oldUser.id, [oldUser.id, newUser.id]);
+    const stale = await call('GET', '/user_api/settings', { headers: userHeaders(oldToken) });
+    check("the deleted account's user token is refused", stale.status === 401, stale);
+    const staleAdmin = await call('GET', '/admin/worker/configs', {
+        headers: { ...userHeaders(oldToken), 'x-user-access-token': oldAccess },
+    });
+    check("the deleted account's admin role token is refused", staleAdmin.status === 401, staleAdmin);
+    const newToken = (await login(`newc${RUN_ID}@example.test`, 'newc-pw')).data.jwt;
+    check('the new account logs in normally',
+        (await call('GET', '/user_api/settings', { headers: userHeaders(newToken) })).status === 200);
+};
+
+const phases = { phase1, phase2, phase3, phase4, phase5, admin: phaseAdmin, tokens: phaseTokens };
 
 const main = async () => {
     const target = process.argv[2] || 'all';

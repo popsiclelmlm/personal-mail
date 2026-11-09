@@ -18,7 +18,7 @@ import { email } from './email';
 import { scheduled } from './scheduled';
 import { getPasswords, getBooleanValue, getDomains, checkAdminAuth, getEnvStringList } from './utils';
 import { checkAccessControl } from './ip_blacklist';
-import { isUserTokenCurrent } from './user_api/user_token';
+import { isUserRoleTokenCurrent, isUserTokenCurrent } from './user_api/user_token';
 import { withFrontendSecurityHeaders } from './security_headers';
 
 const API_PATHS = [
@@ -155,6 +155,10 @@ const checkoutUserRolePayload = async (
 		}
 		if (typeof payload?.user_role !== "string") return;
 		if (userId !== undefined && payload.user_id !== userId) return;
+		// 角色被撤销或更换、账号被删除（编号可能被新账号复用）、退出了所有设备：让前端重新取角色令牌
+		if (!await isUserRoleTokenCurrent(c, payload)) {
+			return c.json({ code: ErrorCode.AUTH_USER_ACCESS_TOKEN_EXPIRED, message: i18n.getMessagesbyContext(c).UserAcceesTokenExpiredMsg }, 401);
+		}
 		c.set("userRolePayload", payload.user_role);
 	} catch (e) {
 		console.error(e);
@@ -286,6 +290,11 @@ app.use('/admin/*', async (c, next) => {
 			}
 			if (payload.user_role !== c.env.ADMIN_USER_ROLE) {
 				return c.json({ code: ErrorCode.AUTH_ADMIN_CREDENTIAL_INVALID, message: msgs.UserRoleIsNotAdminMsg }, 401)
+			}
+			// 回库核对：账号仍存在且没换人、没退出所有设备、现在仍是管理员角色。
+			// 不通过时按「角色令牌过期」返回，前端会重新获取角色令牌再试一次；已被降权的会拿到非管理员令牌
+			if (!await isUserRoleTokenCurrent(c, payload)) {
+				return c.json({ code: ErrorCode.AUTH_USER_ACCESS_TOKEN_EXPIRED, message: msgs.UserAcceesTokenExpiredMsg }, 401);
 			}
 			await next();
 			return;

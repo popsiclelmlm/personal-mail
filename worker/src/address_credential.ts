@@ -1,8 +1,8 @@
 import { Context } from 'hono';
 import { Jwt } from 'hono/utils/jwt';
 
-import { isVersionCurrent } from './auth_version';
-import { getUserTokenVersion } from './user_api/user_token';
+import { isIssuedToAccount, isVersionCurrent } from './auth_version';
+import { getUserAccountState, getUserTokenVersion } from './user_api/user_token';
 
 export type AddressCredentialState = {
     id: number,
@@ -76,6 +76,8 @@ export const signAddressJwt = async (
     if (options.userId !== undefined && options.userId !== null) {
         payload.uid = Number(options.userId);
         payload.utv = (await getUserTokenVersion(c, options.userId)) ?? 0;
+        // 签发时间：账号编号可能被新账号复用，校验时要求不早于账号创建时间
+        payload.uat = Math.floor(Date.now() / 1000);
     }
     return await Jwt.sign(payload, c.env.JWT_SECRET, 'HS256');
 };
@@ -92,7 +94,11 @@ export const isAccountIssuedCredentialValid = async (
         `SELECT 1 AS bound FROM users_address WHERE user_id = ? AND address_id = ?`
     ).bind(uid, addressId).first('bound');
     if (!bound) return false;
-    const currentUserVersion = await getUserTokenVersion(c, uid);
-    if (currentUserVersion === null) return false;
-    return isVersionCurrent(payload.utv, currentUserVersion);
+    const account = await getUserAccountState(c, uid);
+    if (!account) return false;
+    // 旧凭证没有 uat，只能靠绑定关系和版本号；新凭证还要求签给的是当前这个账号
+    if (!isIssuedToAccount({ tokenIssuedAt: payload.uat, accountEmail: account.user_email, accountCreatedAt: account.created_at })) {
+        return false;
+    }
+    return isVersionCurrent(payload.utv, account.token_version);
 };

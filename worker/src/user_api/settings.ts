@@ -5,10 +5,9 @@ import { UserOauth2Settings, UserSettings } from "../models";
 import { getJsonSetting, getMaxAddressCount, getPersonalMailDomains } from "../utils"
 import { CONSTANTS } from "../constants";
 import { commonGetUserRole, updateUserAddressesUpdatedAt } from "../common";
-import { Jwt } from "hono/utils/jwt";
 import { USER_TOKEN_REFRESH_WITHIN_SECONDS } from "../auth_version";
 import { resolveRegisterMode } from "./invite";
-import { signUserToken } from "./user_token";
+import { signUserRoleToken, signUserToken } from "./user_token";
 import { isRegisterWithPersonalMailbox } from "./user";
 
 export default {
@@ -59,14 +58,10 @@ export default {
             &&
             c.env.ADMIN_USER_ROLE === user_role?.role
         );
-        const access_token = user_role?.role ? await Jwt.sign({
-            user_email: user.user_email,
-            user_id: user.user_id,
-            user_role: user_role.role,
-            iat: Math.floor(Date.now() / 1000),
-            // 1 hour
-            exp: Math.floor(Date.now() / 1000) + 3600,
-        }, c.env.JWT_SECRET, "HS256") : null;
+        // 角色令牌 1 小时有效；每次使用时还会回库核对账号和当前角色（撤销角色立即生效）
+        const access_token = user_role?.role
+            ? await signUserRoleToken(c, user, user_role.role)
+            : null;
         // 剩余有效期不足 4 天时换发新令牌（令牌有效期 7 天，滑动续期）；沿用当前的令牌版本
         const new_user_token = user.exp > (
             Math.floor(Date.now() / 1000) + USER_TOKEN_REFRESH_WITHIN_SECONDS

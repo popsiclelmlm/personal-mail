@@ -31,10 +31,16 @@
 - **耗时**：本地 workerd（Apple M4 Pro）上 10 万次迭代约 7ms。Cloudflare 边缘的 CPU 一般更慢，Workers 免费版每次请求只有 10ms CPU，可能超限；用免费版时把 `PASSWORD_PBKDF2_ITERATIONS` 调低（例如 30000），付费版用默认值。上线后用 `wrangler tail` 看登录请求的 CPU 时间再调整。
 - **失败锁定**：登录、注册和重设密码时的验证码，按「IP + 邮箱」计数，连续失败 5 次锁定 15 分钟（返回 429）；验证码连续输错 5 次后作废。计数存在 KV 里，没有 KV 绑定时不锁定。
 - **按 IP 限流**：`RATE_LIMITER` 绑定现在也作用于 `/user_api/login` 和 `/user_api/reset_password`。
-- **令牌**：用户令牌有效期 7 天，剩余不足 4 天时打开页面会自动续期。令牌带版本号 `tv`，重设密码（用户自己或管理员）、「退出所有设备」时版本加 1，旧令牌立即返回 401；升级前签发的没有 `tv` 的令牌按版本 0 处理。角色令牌（`x-user-access-token`，1 小时）不检查版本，最长 1 小时后自然失效。
+- **令牌**：用户令牌有效期 7 天，剩余不足 4 天时打开页面会自动续期。令牌带版本号 `tv`，重设密码（用户自己或管理员）、「退出所有设备」时版本加 1，旧令牌立即返回 401；升级前签发的没有 `tv` 的令牌按版本 0 处理。
+- **账号编号复用**：`users.id` 不是 AUTOINCREMENT，删掉编号最大的账号后，新账号会拿到同一个编号，原来只比对编号和版本，旧账号没过期的令牌能进入新账号。现在校验用户令牌时还要求令牌里的邮箱和账号邮箱完全一致、签发时间不早于账号创建时间（留 2 分钟时钟误差）；账号取得的邮箱凭证新增签发时间 `uat`，同样要求不早于账号创建时间（没有 `uat` 的旧凭证仍只靠绑定关系和版本号）。
+- **角色令牌**（`x-user-access-token`，1 小时）：现在带 `tv`，每次使用都回库核对——账号仍是签发时那个账号、令牌版本没变、账号**当前**的角色仍是令牌里的角色。撤销或更换角色、删除账号、「退出所有设备」后旧角色令牌立即失效，返回 `AUTH_USER_ACCESS_TOKEN_EXPIRED`，前端会自动重新取角色令牌再试一次（被降权的用户拿到的是新角色，访问后台会被拒绝）。升级前签发的不带 `tv` 的角色令牌按版本 0 处理，最长 1 小时后自然过期。
 - **登录提示**：账号不存在和密码错误返回同一条提示，账号不存在时也会算一次哈希，避免探测账号。
 - **重设密码**：`POST /user_api/reset_password`（邮箱 + 验证码 + 新密码），需要后台开启邮件验证并设置验证码发件地址；成功后给账号邮箱发通知。注册接口不再覆盖已有账号。
 - **退出所有设备**：`POST /user_api/logout_all`，用户设置页有入口。
+
+## 邮件附件
+
+附件在浏览器里生成 `blob:` 链接，这种链接和网站同源。原来按邮件声明的类型生成：`text/html`、`image/svg+xml` 之类的附件一点开（或者点正文里指向附件的 `cid:` 链接），里面的脚本就以本站身份运行，能读到浏览器里的登录凭证，CSP 也挡不住。现在只有浏览器不会执行脚本的类型保留原类型、可以直接预览：常见图片（不含 SVG）、音频、视频、PDF、纯文本（保留字符集）；其余一律按 `application/octet-stream` 生成，点开就是下载，文件内容不变。见 `frontend/src/utils/email-parser.js` 的 `safeAttachmentMimeType`。
 
 ## 管理后台登录（会话令牌）
 
@@ -142,6 +148,6 @@ cd worker && pnpm exec wrangler dev --port 8797 --test-scheduled
 node scripts/personal-mail/local-verify.mjs all
 ```
 
-`all` 包含第 1–4 阶段和 `admin`（管理后台会话令牌）阶段，第 5 阶段要单独跑；也可以只跑 `node scripts/personal-mail/local-verify.mjs admin`。
+`all` 包含第 1–4 阶段、`admin`（管理后台会话令牌）和 `tokens`（角色令牌撤销、账号编号复用）阶段，第 5 阶段要单独跑；也可以只跑其中一个阶段，例如 `node scripts/personal-mail/local-verify.mjs tokens`。
 
 单元测试：`cd e2e && npm run test:unit`（用 Node 内置的 `node:sqlite` 模拟 D1，见 `e2e/unit/d1-sqlite.mjs`）。
