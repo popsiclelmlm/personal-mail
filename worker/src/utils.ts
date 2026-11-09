@@ -1,4 +1,5 @@
 import { Context } from "hono";
+import { parseSecretList } from './secret_list';
 import { UserSettings, RoleAddressConfig } from "./models";
 import { CONSTANTS } from "./constants";
 
@@ -303,38 +304,13 @@ export const getAnotherWorkerList = (c: Context<HonoCustomType>): AnotherWorker[
     return c.env.ANOTHER_WORKER_LIST;
 }
 
+// 支持 JSON 数组或单个密码；解析失败时不在日志里输出密码原值
 export const getPasswords = (c: Context<HonoCustomType>): string[] => {
-    if (!c.env.PASSWORDS) {
-        return [];
-    }
-    // check if PASSWORDS is an array, if not use json.parse
-    if (!Array.isArray(c.env.PASSWORDS)) {
-        try {
-            const res = JSON.parse(c.env.PASSWORDS) as string[];
-            return res.filter((item) => item.length > 0);
-        } catch (e) {
-            console.error("Failed to parse PASSWORDS", e);
-            return [];
-        }
-    }
-    return c.env.PASSWORDS.filter((item) => item.length > 0);
+    return parseSecretList(c.env.PASSWORDS, "PASSWORDS");
 }
 
 export const getAdminPasswords = (c: Context<HonoCustomType>): string[] => {
-    if (!c.env.ADMIN_PASSWORDS) {
-        return [];
-    }
-    // check if ADMIN_PASSWORDS is an array, if not use json.parse
-    if (!Array.isArray(c.env.ADMIN_PASSWORDS)) {
-        try {
-            const res = JSON.parse(c.env.ADMIN_PASSWORDS) as string[];
-            return res.filter((item) => item.length > 0);
-        } catch (e) {
-            console.error("Failed to parse ADMIN_PASSWORDS", e);
-            return [];
-        }
-    }
-    return c.env.ADMIN_PASSWORDS.filter((item) => item.length > 0);
+    return parseSecretList(c.env.ADMIN_PASSWORDS, "ADMIN_PASSWORDS");
 }
 
 export const checkIsAdmin = (c: Context<HonoCustomType>): boolean => {
