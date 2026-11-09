@@ -3,7 +3,7 @@
 // 用法：
 //   1. cp scripts/personal-mail/wrangler.local.toml worker/wrangler.toml
 //   2. cd worker && pnpm exec wrangler dev --port 8797 --test-scheduled
-//   3. node scripts/personal-mail/local-verify.mjs [phase1|phase2|phase3|phase4|all]
+//   3. node scripts/personal-mail/local-verify.mjs [phase1|phase2|phase3|phase4|phase5|all]
 // 每次运行都用新的随机名字，可以对同一个本地数据库重复执行。
 import { execFileSync } from 'node:child_process';
 import { existsSync } from 'node:fs';
@@ -638,12 +638,84 @@ const phase4 = async () => {
     check('admins can still create addresses on the personal-only domain', adminCreate.status === 200, adminCreate);
 };
 
-const phases = { phase1, phase2, phase3, phase4 };
+// 第 5 阶段要求 Worker 带 REGISTER_WITH_PERSONAL_MAILBOX=true 运行：
+//   pnpm exec wrangler dev -c wrangler.dev.toml --port 8797 --var REGISTER_WITH_PERSONAL_MAILBOX:true
+// 这个开关打开后站外邮箱注册（第 2 阶段）会被拒绝，所以 all 不包含第 5 阶段
+const phase5 = async () => {
+    console.log('phase 5: sign up with a personal mailbox (REGISTER_WITH_PERSONAL_MAILBOX = true)');
+    const open = await call('GET', '/user_api/open_settings');
+    if (!open.data.registerWithPersonalMailbox) {
+        throw new Error('start the worker with --var REGISTER_WITH_PERSONAL_MAILBOX:true first');
+    }
+    // 后台同时开着邮件验证，用来确认这种注册方式会跳过它
+    await setupMailVerify();
+    const open2 = await call('GET', '/user_api/open_settings');
+    check('open settings switch the form to personal mailbox sign-up', open2.data.registerWithPersonalMailbox === true
+        && JSON.stringify(open2.data.personalMailDomains) === '["me.test"]'
+        && open2.data.enableMailVerify === false && open2.data.enableResetPassword === false, open2.data);
+
+    const [invite] = await createInvites({ count: 1, max_uses: 3 });
+    const name = `rg${RUN_ID}`;
+    const address = `${name}@me.test`;
+    const ip = randomIp();
+    const signup = (body) => call('POST', '/user_api/register', { body, headers: { 'cf-connecting-ip': randomIp() } });
+
+    const external = await signup({ email: `ext${RUN_ID}@example.test`, password: sha256('rg-pw'), invite_code: invite });
+    check('external emails are refused in this mode', external.status === 400, external);
+    const tempDomain = await signup({ mailbox_name: name, mailbox_domain: 'temp.test', password: sha256('rg-pw'), invite_code: invite });
+    check('sign-up cannot use a temp domain', tempDomain.status === 400, tempDomain);
+    const noInvite = await signup({ mailbox_name: name, password: sha256('rg-pw') });
+    check('sign-up still needs an invite code', noInvite.status === 400, noInvite);
+
+    const ok = await call('POST', '/user_api/register', {
+        body: { mailbox_name: name.toUpperCase(), password: sha256('rg-pw'), invite_code: invite },
+        headers: { 'cf-connecting-ip': ip },
+    });
+    check('sign up with name@personal-domain (no verify code needed)', ok.status === 200 && ok.data.email === address, ok);
+    const again = await signup({ mailbox_name: name, password: sha256('rg-pw'), invite_code: invite });
+    check('the same address cannot sign up twice', again.status === 400, again);
+
+    const loginRes = await login(address.toUpperCase(), 'rg-pw');
+    check('log in with the address, case-insensitively', loginRes.status === 200 && !!loginRes.data.jwt, loginRes);
+    const token = loginRes.data.jwt;
+    const settings = await call('GET', '/user_api/settings', { headers: userHeaders(token) });
+    check('the new account gets the default role', settings.data.user_role?.role === 'member', settings.data);
+    const row = (await call('GET', '/user_api/mails/unread_counts', { headers: userHeaders(token) }))
+        .data.results.find((item) => item.address === address);
+    check('the personal mailbox is created, bound and permanent', row && row.is_permanent === 1, row);
+    const flags = sql(`SELECT credential_login_disabled FROM address WHERE name = '${address}'`);
+    if (flags) check('the sign-up mailbox refuses plain credentials', flags[0]?.credential_login_disabled === 1, flags);
+    const uses = sql(`SELECT used_count FROM invite_codes WHERE code = '${invite}'`);
+    if (uses) check('failed sign-ups did not use up the invite code', uses[0]?.used_count === 1, uses);
+
+    await receiveMail(address, `welcome ${RUN_ID}`);
+    const inbox = await call('GET', `/user_api/mails?limit=10&offset=0&address_id=${row?.address_id}`, { headers: userHeaders(token) });
+    check('mail to the sign-up mailbox reaches the account inbox', inbox.data.results?.length === 1, inbox.data);
+
+    const unbind = await call('POST', '/user_api/unbind_address', { body: { address_id: row?.address_id }, headers: userHeaders(token) });
+    check('the login mailbox cannot be unbound', unbind.status === 400, unbind);
+    const otherEmail = `rgo${RUN_ID}@example.test`;
+    await adminCreateUser(otherEmail, 'rgo-pw', 'member');
+    const otherToken = (await login(otherEmail, 'rgo-pw')).data.jwt;
+    const transfer = await call('POST', '/user_api/transfer_address', {
+        body: { address_id: row?.address_id, target_user_email: otherEmail }, headers: userHeaders(token),
+    });
+    check('the login mailbox cannot be transferred', transfer.status === 400, transfer);
+
+    // 地址被管理员删掉后，别人不能把它建成自己的个人邮箱，账号本人可以重新建
+    await call('DELETE', `/admin/delete_address/${row?.address_id}`, { headers: admin });
+    const steal = await call('POST', '/user_api/personal_mailbox', { body: { name }, headers: userHeaders(otherToken) });
+    check("others cannot take over an account's login address", steal.status === 400, steal);
+    const recreate = await call('POST', '/user_api/personal_mailbox', { body: { name }, headers: userHeaders(token) });
+    check('the account owner can recreate the login address', recreate.status === 200 && recreate.data.address === address, recreate);
+};
+
+const phases = { phase1, phase2, phase3, phase4, phase5 };
 
 const main = async () => {
     const target = process.argv[2] || 'all';
     await ensureDb();
-    const selected = target === 'all' ? Object.keys(phases) : [target];
+    const selected = target === 'all' ? Object.keys(phases).filter((name) => name !== 'phase5') : [target];
     for (const name of selected) {
         if (!phases[name]) throw new Error(`unknown phase ${name}`);
         await phases[name]();

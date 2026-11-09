@@ -1190,6 +1190,12 @@ export const MESSAGE_REGISTRY = {
       "en": "Ask the person who invited you",
       "zh": "向邀请你的人索取"
     },
+    "mailboxAccount": { "en": "Email address", "zh": "邮箱地址" },
+    "mailboxAccountTip": { "en": "This address becomes your personal mailbox and your login.", "zh": "注册后这个地址就是你的个人邮箱，也用它登录。" },
+    "mailboxNamePlaceholder": { "en": "Name, e.g. tom", "zh": "名字，例如 tom" },
+    "pleaseInputMailbox": { "en": "Enter the mailbox name and password", "zh": "请输入邮箱名字和密码" },
+    "registeredAs": { "en": "Signed up. Log in with {address}", "zh": "注册成功，请用 {address} 登录" },
+    "loginEmailPlaceholder": { "en": "e.g. {example}", "zh": "例如 {example}" },
     "newPassword": {
       "en": "New password",
       "zh": "新密码"

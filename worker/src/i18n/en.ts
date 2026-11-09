@@ -196,6 +196,7 @@ const messages: LocaleMessages = {
     PermanentQuotaExceededMsg: "Permanent mailbox quota exceeded",
     PersonalMailDomainNotConfiguredMsg: "No personal mailbox domain is configured",
     PersonalMailDomainPermanentOnlyMsg: "Addresses on the personal mailbox domain must stay permanent",
+    LoginMailboxLockedMsg: "This is the login address of your account and cannot be unbound or transferred",
     InviteCodeRequiredMsg: "An invite code is required to register",
     InviteCodeInvalidMsg: "The invite code is invalid, expired or used up",
     TooManyAttemptsMsg: "Too many failed attempts, please try again in 15 minutes",

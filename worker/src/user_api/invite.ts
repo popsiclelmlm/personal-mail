@@ -63,3 +63,11 @@ export const RECORD_INVITE_USE_SQL = `INSERT INTO invite_code_uses (invite_code_
 export const GRANT_ROLE_AFTER_INSERT_SQL = `INSERT INTO user_roles (user_id, role_text)
     SELECT id, ? FROM users WHERE user_email = ? AND changes() = 1
     ON CONFLICT(user_id) DO NOTHING`;
+
+// 用个人邮箱注册（REGISTER_WITH_PERSONAL_MAILBOX）时追加的语句：账号建成后建永久地址并绑定。
+// 账号没建成（例如邀请码被并发用完）时 EXISTS 不成立，不会留下无主地址；地址重名时 UNIQUE 让整批回滚
+export const INSERT_PERSONAL_MAILBOX_AFTER_USER_SQL = `INSERT INTO address
+    (name, source_meta, retention_type, is_permanent, credential_login_disabled)
+    SELECT ?, ?, 'permanent', 1, 1 WHERE EXISTS (SELECT 1 FROM users WHERE user_email = ?)`;
+export const BIND_PERSONAL_MAILBOX_AFTER_USER_SQL = `INSERT INTO users_address (user_id, address_id)
+    SELECT u.id, a.id FROM users u JOIN address a ON a.name = ? WHERE u.user_email = ?`;

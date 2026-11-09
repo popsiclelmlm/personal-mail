@@ -1,16 +1,19 @@
 import { Context } from 'hono';
 
 import i18n from '../i18n';
-import utils, { checkCfTurnstile, getJsonSetting, checkUserPassword, getUserRoles, getStringValue, getMailDomain, includesDomain } from "../utils"
+import utils, { checkCfTurnstile, getJsonSetting, checkUserPassword, getUserRoles, getStringValue, getMailDomain, includesDomain, getBooleanValue, getPersonalMailDomains } from "../utils"
 import { CONSTANTS } from "../constants";
 import { GeoData, UserInfo, UserSettings } from "../models";
 import { sendMail } from "../mails_api/send_mail_api";
 import { hashUserPassword, resolvePbkdf2Iterations, verifyUserPassword } from "./password";
 import { authGuardKey, clearAuthFailures, isAuthLocked, recordAuthFailure } from "./auth_guard";
 import {
-    CONSUME_INVITE_CODE_SQL, GRANT_ROLE_AFTER_INSERT_SQL, INSERT_USER_AFTER_INVITE_SQL, INSERT_USER_SQL,
+    BIND_PERSONAL_MAILBOX_AFTER_USER_SQL, CONSUME_INVITE_CODE_SQL, GRANT_ROLE_AFTER_INSERT_SQL,
+    INSERT_PERSONAL_MAILBOX_AFTER_USER_SQL, INSERT_USER_AFTER_INVITE_SQL, INSERT_USER_SQL,
     normalizeInviteCode, RECORD_INVITE_USE_SQL, resolveRegisterMode, SELECT_USABLE_INVITE_CODE_SQL,
 } from "./invite";
+import { prepareNewAddress } from "../common";
+import { grantPersonalSendBalance } from "./bind_address";
 import { bumpUserTokenVersion, signUserToken } from "./user_token";
 
 const getRequestIp = (c: Context<HonoCustomType>): string | null => c.req.raw.headers.get("cf-connecting-ip");
@@ -43,6 +46,10 @@ const checkVerifyCode = async (
     await clearAuthFailures(c.env.KV, guardKey);
     return null;
 };
+
+/** 是否开启「用个人邮箱注册」：需要 REGISTER_WITH_PERSONAL_MAILBOX 为 true 且配置了个人邮箱专用域名 */
+export const isRegisterWithPersonalMailbox = (c: Context<HonoCustomType>): boolean =>
+    getBooleanValue(c.env.REGISTER_WITH_PERSONAL_MAILBOX) && getPersonalMailDomains(c).length > 0;
 
 /** 要授予新用户的角色：邀请码上指定的角色优先，其次 USER_DEFAULT_ROLE */
 const resolveRoleToGrant = (
@@ -125,21 +132,47 @@ export default {
             return c.text(msgs.UserRegistrationDisabledMsg, 403);
         }
         // check request
-        const { email, password, code, cf_token, invite_code } = await c.req.json();
+        const body = await c.req.json();
+        const { password, code, cf_token, invite_code } = body;
+        const withMailbox = isRegisterWithPersonalMailbox(c);
+        // 用个人邮箱注册：账号就是「名字@个人邮箱域名」，不填站外邮箱，也不走邮件验证和站外邮箱白名单
+        let email = withMailbox ? null : body.email;
+        let mailboxAddress: string | null = null;
+        if (withMailbox) {
+            if (typeof body.mailbox_name !== 'string' || !body.mailbox_name.trim() || typeof password !== 'string' || !password) {
+                return c.text(msgs.InvalidEmailOrPasswordMsg, 400)
+            }
+            try {
+                const prepared = await prepareNewAddress(c, {
+                    name: body.mailbox_name.trim().toLowerCase(),
+                    domain: typeof body.mailbox_domain === 'string' && body.mailbox_domain ? body.mailbox_domain : null,
+                    enablePrefix: false,
+                    addressPrefix: '',
+                    personalMailbox: true,
+                });
+                mailboxAddress = `${prepared.name}@${prepared.domain}`;
+            } catch (e) {
+                return c.text(`${msgs.FailedCreateAddressMsg}: ${(e as Error).message}`, 400)
+            }
+            const taken = await c.env.DB.prepare(`SELECT 1 AS taken FROM address WHERE name = ?`)
+                .bind(mailboxAddress).first<number>('taken');
+            if (taken) return c.text(msgs.AddressAlreadyExistsMsg, 400)
+            email = mailboxAddress;
+        }
         if (!email || !password || typeof email !== 'string' || typeof password !== 'string') {
             return c.text(msgs.InvalidEmailOrPasswordMsg, 400)
         }
         checkUserPassword(password);
         // check cf turnstile only when mail verify is disabled
         // (when enabled, verify_code endpoint already checks turnstile)
-        if (!settings.enableMailVerify) {
+        if (!settings.enableMailVerify || withMailbox) {
             try {
                 await checkCfTurnstile(c, cf_token);
             } catch (error) {
                 return c.text(msgs.TurnstileCheckFailedMsg, 400)
             }
         }
-        if (settings.enableMailVerify && !code) {
+        if (settings.enableMailVerify && !withMailbox && !code) {
             return c.text(msgs.InvalidVerifyCodeMsg, 400)
         }
         // 邀请制：必须带有效的邀请码
@@ -147,16 +180,17 @@ export default {
         if (registerMode === 'invite' && !inviteCode) {
             return c.text(msgs.InviteCodeRequiredMsg, 400)
         }
-        // check mail domain allow list
+        // check mail domain allow list（站外邮箱才检查）
         const mailDomain = getMailDomain(email);
-        if (settings.enableMailAllowList
+        if (!withMailbox
+            && settings.enableMailAllowList
             && settings.mailAllowList
             && !includesDomain(settings.mailAllowList, mailDomain)
         ) {
             return c.text(`${msgs.UserMailDomainMustInMsg} ${JSON.stringify(settings.mailAllowList, null, 2)}`, 400)
         }
         // check email regex
-        if (settings.enableEmailCheckRegex && settings.emailCheckRegex) {
+        if (!withMailbox && settings.enableEmailCheckRegex && settings.emailCheckRegex) {
             try {
                 const regex = new RegExp(settings.emailCheckRegex);
                 if (!regex.test(email)) {
@@ -175,13 +209,20 @@ export default {
             }
         }
         // check code
-        if (settings.enableMailVerify) {
+        if (settings.enableMailVerify && !withMailbox) {
             const codeResponse = await checkVerifyCode(c, email, code);
             if (codeResponse) return codeResponse;
         }
         const { role: roleToGrant, valid: roleValid } = resolveRoleToGrant(c, invite?.role);
         if (!roleValid) {
             return c.text(msgs.InvalidUserDefaultRoleMsg, 500);
+        }
+        // 注册时建的个人邮箱要占角色的永久邮箱额度，额度为 0 的角色不能用这种方式注册
+        if (withMailbox) {
+            const role = getUserRoles(c).find((item) => item.role === roleToGrant);
+            if ((role?.max_permanent_address_count ?? 0) < 1) {
+                return c.text(msgs.PermanentQuotaExceededMsg, 400);
+            }
         }
         // geo data
         const reqIp = getRequestIp(c)
@@ -205,13 +246,18 @@ export default {
         if (roleToGrant) {
             statements.push(c.env.DB.prepare(GRANT_ROLE_AFTER_INSERT_SQL).bind(roleToGrant, email));
         }
+        if (mailboxAddress) {
+            statements.push(c.env.DB.prepare(INSERT_PERSONAL_MAILBOX_AFTER_USER_SQL)
+                .bind(mailboxAddress, reqIp || 'register', email));
+            statements.push(c.env.DB.prepare(BIND_PERSONAL_MAILBOX_AFTER_USER_SQL).bind(mailboxAddress, email));
+        }
         let results: D1Result[];
         try {
             results = await c.env.DB.batch(statements);
         } catch (e) {
             const error = e as Error;
             if (error.message && error.message.includes("UNIQUE")) {
-                return c.text(msgs.UserAlreadyExistsMsg, 400)
+                return c.text(mailboxAddress ? msgs.AddressAlreadyExistsMsg : msgs.UserAlreadyExistsMsg, 400)
             }
             return c.text(`${msgs.FailedToRegisterMsg}: ${error.message}`, 500)
         }
@@ -220,10 +266,15 @@ export default {
             // 并发注册把邀请码的最后一次用掉了
             return c.text(msgs.InviteCodeInvalidMsg, 400)
         }
-        if (settings.enableMailVerify) {
+        if (settings.enableMailVerify && !withMailbox) {
             await c.env.KV.delete(verifyCodeKey(email));
         }
-        return c.json({ success: true })
+        if (mailboxAddress) {
+            const userId = await c.env.DB.prepare(`SELECT id FROM users WHERE user_email = ?`)
+                .bind(email).first<number>('id');
+            if (userId) await grantPersonalSendBalance(c, userId, mailboxAddress);
+        }
+        return c.json({ success: true, email })
     },
     login: async (c: Context<HonoCustomType>) => {
         const { email, password, cf_token } = await c.req.json();
@@ -244,9 +295,14 @@ export default {
         if (await isAuthLocked(c.env.KV, guardKey)) {
             return c.text(msgs.TooManyAttemptsMsg, 429);
         }
-        const user = await c.env.DB.prepare(
+        type LoginUser = { id: number, user_email: string, password: string | null, token_version: number | null };
+        const findUser = (value: string) => c.env.DB.prepare(
             `SELECT id, user_email, password, token_version FROM users where user_email = ?`
-        ).bind(email).first<{ id: number, user_email: string, password: string | null, token_version: number | null }>();
+        ).bind(value).first<LoginUser>();
+        // 个人邮箱注册的账号存的是小写地址，输入大写也能登录
+        const trimmedEmail = email.trim();
+        const user = await findUser(trimmedEmail)
+            ?? (trimmedEmail.toLowerCase() !== trimmedEmail ? await findUser(trimmedEmail.toLowerCase()) : null);
         const iterations = resolvePbkdf2Iterations(c.env.PASSWORD_PBKDF2_ITERATIONS);
         // 账号不存在时也算一次哈希，并返回和密码错误相同的提示，避免探测账号
         const { ok, needsUpgrade } = await verifyUserPassword(password, user?.password, iterations);

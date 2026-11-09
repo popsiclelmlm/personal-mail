@@ -25,6 +25,18 @@ export const getBindedAddressById = async (
     return address ?? null;
 }
 
+/** 地址是不是当前账号的登录邮箱（用个人邮箱注册的账号） */
+const isAccountLoginMailbox = async (
+    c: Context<HonoCustomType>,
+    user_id: number | string,
+    address_id: number | string,
+): Promise<boolean> => {
+    const row = await c.env.DB.prepare(
+        `SELECT 1 AS hit FROM users u JOIN address a ON a.name = u.user_email WHERE u.id = ? AND a.id = ?`
+    ).bind(user_id, address_id).first<number>('hit');
+    return !!row;
+}
+
 /**
  * 个人邮箱默认可以发信：按角色配置的 personal_send_balance 初始化发信额度。
  * 已有发信记录时只把额度补到不低于角色配置，并重新启用。
@@ -216,6 +228,9 @@ const UserBindAddressModule = {
         if (!address_id || !user_id) {
             return c.text(msgs.InvalidAddressOrUserTokenMsg, 400)
         }
+        if (await isAccountLoginMailbox(c, user_id, address_id)) {
+            return c.text(msgs.LoginMailboxLockedMsg, 400)
+        }
         // check if address exists
         const db_address_id = await c.env.DB.prepare(
             `SELECT id FROM address where id = ?`
@@ -327,6 +342,9 @@ const UserBindAddressModule = {
     transferAddress: async (c: Context<HonoCustomType>) => {
         const { user_id } = c.get("userPayload");
         const { address_id, target_user_email } = await c.req.json();
+        if (address_id && await isAccountLoginMailbox(c, user_id, address_id)) {
+            return c.text(i18n.getMessagesbyContext(c).LoginMailboxLockedMsg, 400)
+        }
         const result = await transferAddressToUser(c, user_id, address_id, target_user_email);
         if (!result.ok) return c.text(result.message, result.status);
         return c.json({ success: true })

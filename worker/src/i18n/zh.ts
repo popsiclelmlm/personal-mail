@@ -196,6 +196,7 @@ const messages: LocaleMessages = {
     PermanentQuotaExceededMsg: "永久邮箱额度已用完",
     PersonalMailDomainNotConfiguredMsg: "没有配置个人邮箱域名",
     PersonalMailDomainPermanentOnlyMsg: "个人邮箱域名下的地址只能是永久邮箱",
+    LoginMailboxLockedMsg: "这是账号的登录邮箱，不能解绑或转移",
     InviteCodeRequiredMsg: "注册需要邀请码",
     InviteCodeInvalidMsg: "邀请码无效、已过期或已用完",
     TooManyAttemptsMsg: "失败次数过多，请 15 分钟后再试",

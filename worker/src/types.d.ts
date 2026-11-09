@@ -83,6 +83,8 @@ type Bindings = {
     FORWARD_ADDRESS_LIST: string | string[] | undefined
     // 注册策略：open（默认）、invite（凭邀请码注册）、closed
     REGISTER_MODE: string | undefined
+    // true：注册时直接用「名字@个人邮箱域名」当账号，并自动建好这个个人邮箱
+    REGISTER_WITH_PERSONAL_MAILBOX: string | boolean | undefined
     // 用户密码 PBKDF2 迭代次数，默认 100000（workerd 的上限），最少 10000
     PASSWORD_PBKDF2_ITERATIONS: string | number | undefined
     // 同一 IP 在同一基础域名下同时存在的地址上限，默认 5，0 表示关闭；有角色的登录用户不受限

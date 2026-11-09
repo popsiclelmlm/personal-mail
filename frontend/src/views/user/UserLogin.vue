@@ -1,6 +1,6 @@
 <script setup>
 import { useMessage } from 'naive-ui'
-import { onMounted, ref } from "vue";
+import { computed, onMounted, ref, watch } from "vue";
 import { useScopedI18n } from '@/i18n/app'
 import { KeyFilled } from '@vicons/material'
 
@@ -27,6 +27,18 @@ const user = ref({
     code: "",
     inviteCode: ""
 });
+// 用个人邮箱注册：账号就是「名字@个人邮箱域名」，注册时自动建好这个个人邮箱
+const withMailbox = computed(() => !!userOpenSettings.value.registerWithPersonalMailbox)
+const mailboxDomains = computed(() => userOpenSettings.value.personalMailDomains || [])
+const mailboxDomainOptions = computed(() => mailboxDomains.value.map((domain) => ({ label: domain, value: domain })))
+const mailboxName = ref("")
+const mailboxDomain = ref(null)
+watch(mailboxDomains, (domains) => {
+    if (!mailboxDomain.value && domains.length > 0) mailboxDomain.value = domains[0]
+}, { immediate: true })
+const loginEmailPlaceholder = computed(() => withMailbox.value && mailboxDomains.value.length > 0
+    ? t('loginEmailPlaceholder', { example: `tom@${mailboxDomains.value[0]}` })
+    : '')
 const signupCfToken = ref("")
 const resetCfToken = ref("")
 const loginCfToken = ref("")
@@ -104,7 +116,40 @@ const sendVerificationCode = async () => {
     }
 };
 
+const mailboxSignup = async () => {
+    if (!mailboxName.value.trim() || !user.value.password) {
+        message.error(t('pleaseInputMailbox'));
+        return;
+    }
+    try {
+        const res = await api.fetch(`/user_api/register`, {
+            method: "POST",
+            body: JSON.stringify({
+                mailbox_name: mailboxName.value.trim(),
+                mailbox_domain: mailboxDomain.value || mailboxDomains.value[0],
+                password: await hashPassword(user.value.password),
+                invite_code: user.value.inviteCode,
+                cf_token: signupCfToken.value
+            }),
+            message: message
+        });
+        if (res) {
+            // 注册成功后把地址填进登录表单
+            user.value.email = res.email || '';
+            tabValue.value = "signin";
+            message.success(t('registeredAs', { address: res.email || '' }));
+        }
+    } catch (error) {
+        message.error(error.message || "register failed");
+        signupTurnstileRef.value?.refresh?.();
+    }
+};
+
 const emailSignup = async () => {
+    if (withMailbox.value) {
+        await mailboxSignup();
+        return;
+    }
     if (!user.value.email || !user.value.password) {
         message.error(t('pleaseInput'));
         return;
@@ -213,7 +258,7 @@ onMounted(async () => {
             <n-tab-pane name="signin" :tab="t('login')">
                 <n-form>
                     <n-form-item-row :label="t('email')" required>
-                        <n-input v-model:value="user.email" />
+                        <n-input v-model:value="user.email" :placeholder="loginEmailPlaceholder || undefined" />
                     </n-form-item-row>
                     <n-form-item-row :label="t('password')" required>
                         <n-input v-model:value="user.password" type="password" show-password-on="click"
@@ -244,7 +289,19 @@ onMounted(async () => {
             </n-tab-pane>
             <n-tab-pane v-if="userOpenSettings.enable" name="signup" :tab="t('register')">
                 <n-form>
-                    <n-form-item-row :label="t('email')" required>
+                    <n-form-item-row v-if="withMailbox" :label="t('mailboxAccount')" required
+                        :feedback="t('mailboxAccountTip')">
+                        <div class="mailbox-account">
+                            <n-input v-model:value="mailboxName" class="mailbox-account-name"
+                                :placeholder="t('mailboxNamePlaceholder')" :maxlength="openSettings.maxAddressLen" />
+                            <span class="mailbox-account-at">@</span>
+                            <n-select v-if="mailboxDomainOptions.length > 1" v-model:value="mailboxDomain"
+                                class="mailbox-account-domain" :options="mailboxDomainOptions"
+                                :consistent-menu-width="false" />
+                            <span v-else class="mailbox-account-domain-text">{{ mailboxDomains[0] }}</span>
+                        </div>
+                    </n-form-item-row>
+                    <n-form-item-row v-else :label="t('email')" required>
                         <n-input v-model:value="user.email" />
                     </n-form-item-row>
                     <n-form-item-row :label="t('password')" required>
@@ -315,6 +372,28 @@ onMounted(async () => {
 
 .n-button {
     margin-top: 10px;
+}
+
+.mailbox-account {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    width: 100%;
+}
+
+.mailbox-account-name {
+    flex: 1 1 auto;
+    min-width: 0;
+}
+
+.mailbox-account-domain {
+    flex: 0 1 180px;
+    min-width: 120px;
+}
+
+.mailbox-account-at,
+.mailbox-account-domain-text {
+    white-space: nowrap;
 }
 
 .oauth2-icon {

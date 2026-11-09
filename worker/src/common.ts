@@ -351,7 +351,20 @@ const insertAddressRecord = async (
     }
 }
 
-export const newAddress = async (
+type PrepareNewAddressOptions = {
+    name: string, domain: string | undefined | null,
+    enablePrefix: boolean,
+    enableRandomSubdomain?: boolean,
+    checkLengthByConfig?: boolean,
+    addressPrefix?: string | undefined | null,
+    checkAllowDomains?: boolean,
+    enableCheckNameRegex?: boolean,
+    // true：只能用个人邮箱专用域名（PERSONAL_MAIL_DOMAINS）；false：临时邮箱，排除这些域名
+    personalMailbox?: boolean,
+};
+
+/** 建地址前的校验和规范化（名字规则、长度、前缀、域名），不写库；注册时直接建个人邮箱也用它 */
+export const prepareNewAddress = async (
     c: Context<HonoCustomType>,
     {
         name,
@@ -362,24 +375,9 @@ export const newAddress = async (
         addressPrefix = null,
         checkAllowDomains = true,
         enableCheckNameRegex = true,
-        sourceMeta = null,
-        beforeInsert = null,
         personalMailbox = false,
-    }: {
-        name: string, domain: string | undefined | null,
-        enablePrefix: boolean,
-        enableRandomSubdomain?: boolean,
-        checkLengthByConfig?: boolean,
-        addressPrefix?: string | undefined | null,
-        checkAllowDomains?: boolean,
-        enableCheckNameRegex?: boolean,
-        sourceMeta?: string | undefined | null,
-        // 域名解析完成之后、写库之前调用，抛出的错误原样向上传递
-        beforeInsert?: ((target: { domain: string, baseDomain: string }) => Promise<void>) | null,
-        // true：只能用个人邮箱专用域名（PERSONAL_MAIL_DOMAINS）；false：临时邮箱，排除这些域名
-        personalMailbox?: boolean,
-    }
-): Promise<{ address: string, jwt: string, password?: string | null, address_id: number }> => {
+    }: PrepareNewAddressOptions
+): Promise<{ name: string, domain: string, baseDomain: string }> => {
     const msgs = i18n.getMessagesbyContext(c);
     // trim whitespace and remove special characters
     name = name.trim().replace(getNameRegex(c), '')
@@ -442,8 +440,38 @@ export const newAddress = async (
     if (enableRandomSubdomain && !allowRandomSubdomainForDomain(c, domain)) {
         throw new Error(msgs.RandomSubdomainNotAllowedMsg)
     }
+    return { name, domain, baseDomain: matchedAllowDomain };
+}
+
+export const newAddress = async (
+    c: Context<HonoCustomType>,
+    {
+        name,
+        domain,
+        enablePrefix,
+        enableRandomSubdomain = false,
+        checkLengthByConfig = true,
+        addressPrefix = null,
+        checkAllowDomains = true,
+        enableCheckNameRegex = true,
+        sourceMeta = null,
+        beforeInsert = null,
+        personalMailbox = false,
+    }: PrepareNewAddressOptions & {
+        sourceMeta?: string | undefined | null,
+        // 域名解析完成之后、写库之前调用，抛出的错误原样向上传递
+        beforeInsert?: ((target: { domain: string, baseDomain: string }) => Promise<void>) | null,
+    }
+): Promise<{ address: string, jwt: string, password?: string | null, address_id: number }> => {
+    const msgs = i18n.getMessagesbyContext(c);
+    const prepared = await prepareNewAddress(c, {
+        name, domain, enablePrefix, enableRandomSubdomain, checkLengthByConfig,
+        addressPrefix, checkAllowDomains, enableCheckNameRegex, personalMailbox,
+    });
+    name = prepared.name;
+    domain = prepared.domain;
     if (beforeInsert) {
-        await beforeInsert({ domain, baseDomain: matchedAllowDomain });
+        await beforeInsert({ domain, baseDomain: prepared.baseDomain });
     }
 
     const maxAttempts = enableRandomSubdomain ? MAX_RANDOM_SUBDOMAIN_ATTEMPTS : 1;

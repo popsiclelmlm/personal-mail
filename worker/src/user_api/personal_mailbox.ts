@@ -260,6 +260,10 @@ const createPersonalMailbox = async (c: Context<HonoCustomType>) => {
     }
 
     let created: { address: string, address_id: number };
+    // 账号的登录邮箱（个人邮箱注册的账号）只能由账号本人重新创建，避免别人收走这个地址的邮件
+    const loginOwner = async (address: string) => c.env.DB.prepare(
+        `SELECT id FROM users WHERE user_email = ?`
+    ).bind(address).first<number>('id');
     try {
         created = await newAddress(c, {
             name, domain,
@@ -271,6 +275,11 @@ const createPersonalMailbox = async (c: Context<HonoCustomType>) => {
         });
     } catch (e) {
         return c.text(`${msgs.FailedCreateAddressMsg}: ${(e as Error).message}`, 400);
+    }
+    const ownerId = await loginOwner(created.address);
+    if (ownerId && String(ownerId) !== String(user_id)) {
+        await c.env.DB.prepare(`DELETE FROM address WHERE id = ?`).bind(created.address_id).run();
+        return c.text(msgs.AddressAlreadyExistsMsg, 400);
     }
     // 设为永久并绑定到账号；失败时删掉刚建的地址，避免留下无主地址
     try {

@@ -2,13 +2,14 @@ import { Context } from "hono";
 
 import i18n from "../i18n";
 import { UserOauth2Settings, UserSettings } from "../models";
-import { getJsonSetting, getMaxAddressCount } from "../utils"
+import { getJsonSetting, getMaxAddressCount, getPersonalMailDomains } from "../utils"
 import { CONSTANTS } from "../constants";
 import { commonGetUserRole, updateUserAddressesUpdatedAt } from "../common";
 import { Jwt } from "hono/utils/jwt";
 import { USER_TOKEN_REFRESH_WITHIN_SECONDS } from "../auth_version";
 import { resolveRegisterMode } from "./invite";
 import { signUserToken } from "./user_token";
+import { isRegisterWithPersonalMailbox } from "./user";
 
 export default {
     openSettings: async (c: Context<HonoCustomType>) => {
@@ -28,13 +29,17 @@ export default {
             console.error("Failed to get oauth2 settings", e);
         }
         const registerMode = resolveRegisterMode(c.env.REGISTER_MODE);
+        // 用个人邮箱注册时账号就是站内地址，不走邮件验证，也没有自助重设密码（只能由管理员重设）
+        const withMailbox = isRegisterWithPersonalMailbox(c);
         return c.json({
             enable: settings.enable && registerMode !== 'closed',
-            enableMailVerify: settings.enableMailVerify,
+            enableMailVerify: settings.enableMailVerify && !withMailbox,
             oauth2ClientIDs: oauth2ClientIDs,
             registerMode: registerMode,
+            registerWithPersonalMailbox: withMailbox,
+            personalMailDomains: withMailbox ? getPersonalMailDomains(c) : [],
             // 重设密码要靠邮箱验证码
-            enableResetPassword: !!(settings.enableMailVerify && settings.verifyMailSender && c.env.KV),
+            enableResetPassword: !withMailbox && !!(settings.enableMailVerify && settings.verifyMailSender && c.env.KV),
         })
     },
     settings: async (c: Context<HonoCustomType>) => {
