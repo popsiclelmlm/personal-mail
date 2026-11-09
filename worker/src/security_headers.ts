@@ -5,6 +5,7 @@
  * 外加 WebAssembly（前端用它解析邮件）；不允许内联脚本、事件处理器和 eval。
  * 万一邮件内容的净化有遗漏，邮件里的脚本也执行不了。
  * 不限制样式和图片：邮件排版依赖内联样式，远程图片由前端按用户设置控制。
+ * 以后启用 Google 广告或 Telegram 小程序时，要把它们的脚本域名加进 script-src。
  */
 export const FRONTEND_CSP = [
     "script-src 'self' 'wasm-unsafe-eval' https://challenges.cloudflare.com https://static.cloudflareinsights.com",

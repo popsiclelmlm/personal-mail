@@ -146,7 +146,8 @@ const generateNameLoading = ref(false);
 const generateName = async () => {
     try {
         generateNameLoading.value = true;
-        const { faker } = await import('https://esm.sh/@faker-js/faker');
+        // faker 打包进本站按需加载（只要英文语言包）；页面 CSP 不允许从第三方 CDN 加载脚本
+        const { faker } = await import('@faker-js/faker/locale/en');
         emailName.value = faker.internet.email()
             .split('@')[0]
             .replace(/\s+/g, '.')
