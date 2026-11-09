@@ -3,7 +3,7 @@
 // 用法：
 //   1. cp scripts/personal-mail/wrangler.local.toml worker/wrangler.toml
 //   2. cd worker && pnpm exec wrangler dev --port 8797 --test-scheduled
-//   3. node scripts/personal-mail/local-verify.mjs [phase1|phase2|phase3|phase4|phase5|all]
+//   3. node scripts/personal-mail/local-verify.mjs [phase1|phase2|phase3|phase4|phase5|admin|all]
 // 每次运行都用新的随机名字，可以对同一个本地数据库重复执行。
 import { execFileSync } from 'node:child_process';
 import { existsSync } from 'node:fs';
@@ -758,7 +758,102 @@ const phase5 = async () => {
     check('the account owner can recreate the login address', recreate.status === 200 && recreate.data.address === address, recreate);
 };
 
-const phases = { phase1, phase2, phase3, phase4, phase5 };
+// 管理员会话令牌：登录拿令牌、令牌访问后台、过期/吊销/伪造的令牌被拒、明文密码兼容和失败锁定
+const b64url = (value) => Buffer.from(typeof value === 'string' ? value : JSON.stringify(value)).toString('base64url');
+const hmacHex = (key, message) => createHmac('sha256', key).update(message).digest('hex');
+const signJwtWith = (payload, secret) => {
+    const unsigned = `${b64url({ alg: 'HS256', typ: 'JWT' })}.${b64url(payload)}`;
+    return `${unsigned}.${createHmac('sha256', secret).update(unsigned).digest('base64url')}`;
+};
+const decodeAdminJwt = (token) => JSON.parse(Buffer.from(String(token).split('.')[1] || '', 'base64url').toString() || '{}');
+// 和 worker/src/admin_token.ts 相同的派生方式，用来在本地伪造「签名正确但已过期」的令牌
+const adminTokenSecret = () => hmacHex(JWT_SECRET, 'admin-session-token/v1');
+const forgeAdminToken = (claims) => {
+    const secret = adminTokenSecret();
+    const now = Math.floor(Date.now() / 1000);
+    return signJwtWith({
+        typ: 'admin', av: 0, ph: hmacHex(secret, `admin-password:${ADMIN_PASSWORD}`).slice(0, 32),
+        iat: now, exp: now + 600, ...claims,
+    }, secret);
+};
+
+const adminLogin = (password = ADMIN_PASSWORD, ip = randomIp()) => call('POST', '/open_api/admin_login', {
+    body: { password: sha256(password), cf_token: '' },
+    headers: { 'cf-connecting-ip': ip },
+});
+const adminGet = (headerValue, ip) => call('GET', '/admin/worker/configs', {
+    headers: { 'x-admin-auth': headerValue, ...(ip ? { 'cf-connecting-ip': ip } : {}) },
+});
+
+const phaseAdmin = async () => {
+    console.log('admin session tokens');
+    const loginRes = await adminLogin();
+    const token = loginRes.data?.token;
+    const payload = decodeAdminJwt(token);
+    check('admin login returns a session token', loginRes.status === 200 && loginRes.data.success === true
+        && /^eyJ/.test(token || '') && payload.typ === 'admin', loginRes);
+    check('the token expires in about 8 hours and carries no password',
+        Math.abs(loginRes.data.expires_at - payload.exp) === 0
+        && Math.abs(payload.exp - Math.floor(Date.now() / 1000) - 8 * 3600) < 120
+        && !String(token).includes(ADMIN_PASSWORD) && !JSON.stringify(payload).includes(ADMIN_PASSWORD), payload);
+
+    const viaToken = await adminGet(token);
+    check('the session token opens the admin API', viaToken.status === 200 && viaToken.data.HAS_ADMIN_PASSWORDS === 1, viaToken);
+    check('worker config shows the admin token TTL', viaToken.data?.ADMIN_TOKEN_TTL_SECONDS === 8 * 3600, viaToken.data?.ADMIN_TOKEN_TTL_SECONDS);
+    const viaPassword = await adminGet(ADMIN_PASSWORD);
+    check('the plain admin password still works for scripts', viaPassword.status === 200, viaPassword);
+
+    const wrongLogin = await adminLogin('wrong-admin-pass');
+    check('a wrong admin password is rejected without a token',
+        wrongLogin.status === 401 && wrongLogin.data.code === 'AUTH_ADMIN_CREDENTIAL_INVALID' && !wrongLogin.data.token, wrongLogin);
+
+    const expired = await adminGet(forgeAdminToken({ av: payload.av, iat: payload.iat - 7200, exp: Math.floor(Date.now() / 1000) - 5 }));
+    check('an expired token is rejected', expired.status === 401 && expired.data.code === 'AUTH_ADMIN_CREDENTIAL_INVALID', expired);
+    const stillValid = await adminGet(forgeAdminToken({ av: payload.av }));
+    check('a correctly derived token is accepted (same derivation as the worker)', stillValid.status === 200, stillValid);
+    const [h, , sig] = String(token).split('.');
+    const tampered = await adminGet(`${h}.${b64url({ ...payload, exp: payload.exp + 86400 })}.${sig}`);
+    check('a tampered token is rejected', tampered.status === 401, tampered);
+    const plainSecret = await adminGet(signJwtWith({ ...payload }, JWT_SECRET));
+    check('a token signed with the raw JWT_SECRET is rejected', plainSecret.status === 401, plainSecret);
+    const otherPassword = await adminGet(forgeAdminToken({
+        av: payload.av, ph: hmacHex(adminTokenSecret(), 'admin-password:old-pass').slice(0, 32),
+    }));
+    check('a token bound to a password no longer configured is rejected', otherPassword.status === 401, otherPassword);
+
+    // x-admin-auth 明文密码失败计入锁定（和登录接口共用计数），令牌不受影响
+    const lockIp = randomIp();
+    const wrongHeaders = [];
+    for (let i = 0; i < 5; i++) wrongHeaders.push((await adminGet(`wrong-${i}`, lockIp)).status);
+    check('wrong plain passwords in x-admin-auth lock the IP on the 5th try',
+        wrongHeaders.slice(0, 4).every((status) => status === 401) && wrongHeaders[4] === 429, wrongHeaders);
+    const lockedPassword = await adminGet(ADMIN_PASSWORD, lockIp);
+    check('the locked IP cannot use even the right plain password', lockedPassword.status === 429, lockedPassword);
+    const lockedLogin = await adminLogin(ADMIN_PASSWORD, lockIp);
+    check('the locked IP cannot log in either', lockedLogin.status === 429, lockedLogin);
+    const tokenFromLockedIp = await adminGet(token, lockIp);
+    check('a valid token still works from the locked IP', tokenFromLockedIp.status === 200, tokenFromLockedIp);
+
+    const loginIp = randomIp();
+    const loginStatuses = [];
+    for (let i = 0; i < 5; i++) loginStatuses.push((await adminLogin(`wrong-${i}`, loginIp)).status);
+    check('admin login locks after 5 wrong passwords',
+        loginStatuses.slice(0, 4).every((status) => status === 401) && loginStatuses[4] === 429, loginStatuses);
+
+    // 退出所有设备：所有已签发的令牌立即失效，明文密码不受影响
+    const second = (await adminLogin()).data.token;
+    const revoke = await call('POST', '/admin/logout_all', { headers: { 'x-admin-auth': token } });
+    check('logout_all bumps the admin token version', revoke.status === 200 && revoke.data.version === (payload.av || 0) + 1, revoke);
+    const afterRevoke = [await adminGet(token), await adminGet(second)];
+    check('all earlier tokens are revoked', afterRevoke.every((res) => res.status === 401
+        && res.data.code === 'AUTH_ADMIN_CREDENTIAL_INVALID'), afterRevoke.map((res) => res.status));
+    const fresh = await adminLogin();
+    check('a new login after revoking gets a working token',
+        decodeAdminJwt(fresh.data.token).av === revoke.data.version && (await adminGet(fresh.data.token)).status === 200, fresh);
+    check('the plain password is unaffected by logout_all', (await adminGet(ADMIN_PASSWORD)).status === 200);
+};
+
+const phases = { phase1, phase2, phase3, phase4, phase5, admin: phaseAdmin };
 
 const main = async () => {
     const target = process.argv[2] || 'all';

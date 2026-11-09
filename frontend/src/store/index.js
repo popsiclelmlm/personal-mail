@@ -1,8 +1,12 @@
-import { computed, ref } from "vue";
+import { computed, ref, watch } from "vue";
 import {
     createGlobalState, useStorage, useDark, useToggle,
     useLocalStorage, useSessionStorage
 } from '@vueuse/core'
+import {
+    ADMIN_TOKEN_STORAGE_KEY, isAdminTokenUsable,
+    purgeLegacyAdminPassword, scheduleAdminTokenExpiry
+} from '../utils/admin-token'
 
 export const useGlobalState = createGlobalState(
     () => {
@@ -86,7 +90,22 @@ export const useGlobalState = createGlobalState(
         const showAddressCredential = ref(false);
         const showAdminAuth = ref(false);
         const auth = useStorage('auth', '');
-        const adminAuth = useStorage('adminAuth', '');
+        // 管理员会话令牌（不再保存管理员密码）；旧版前端存的明文密码启动时清掉
+        purgeLegacyAdminPassword();
+        const adminToken = useStorage(ADMIN_TOKEN_STORAGE_KEY, '');
+        if (adminToken.value && !isAdminTokenUsable(adminToken.value)) {
+            adminToken.value = '';
+        }
+        // 令牌到期时清掉，后台随之回到登录框（其他标签页通过 storage 事件同步）
+        let cancelAdminTokenExpiry = null;
+        watch(adminToken, (token) => {
+            cancelAdminTokenExpiry?.();
+            cancelAdminTokenExpiry = token
+                ? scheduleAdminTokenExpiry(token, () => {
+                    if (adminToken.value === token) adminToken.value = '';
+                })
+                : null;
+        }, { immediate: true });
         const jwt = useStorage('jwt', '');
         const addressPassword = useSessionStorage('addressPassword', '');
         const adminTab = useSessionStorage('adminTab', "account");
@@ -143,7 +162,7 @@ export const useGlobalState = createGlobalState(
             showUserSystem.value && !!userJwt.value
         );
         const showAdminPage = computed(() =>
-            !!adminAuth.value
+            !!adminToken.value
             || userSettings.value.is_admin
             || openSettings.value.disableAdminPasswordCheck
         );
@@ -174,7 +193,7 @@ export const useGlobalState = createGlobalState(
             showAddressCredential,
             auth,
             jwt,
-            adminAuth,
+            adminToken,
             showAdminAuth,
             adminTab,
             adminMailTabAddress,

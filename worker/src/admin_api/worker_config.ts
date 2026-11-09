@@ -2,6 +2,7 @@ import { Context } from 'hono';
 
 import utils from '../utils';
 import { CONSTANTS } from '../constants';
+import { resolveAdminTokenTtl } from '../admin_token';
 import { isS3Enabled } from '../mails_api/s3_attachment';
 
 export default {
@@ -11,6 +12,7 @@ export default {
             "TITLE": c.env.TITLE,
             "HAS_PASSWORD": utils.getPasswords(c).length,
             "HAS_ADMIN_PASSWORDS": utils.getAdminPasswords(c).length,
+            "ADMIN_TOKEN_TTL_SECONDS": resolveAdminTokenTtl(c.env.ADMIN_TOKEN_TTL_SECONDS),
             "ANNOUNCEMENT": utils.getStringValue(c.env.ANNOUNCEMENT),
             "ALWAYS_SHOW_ANNOUNCEMENT": utils.getBooleanValue(c.env.ALWAYS_SHOW_ANNOUNCEMENT),
 

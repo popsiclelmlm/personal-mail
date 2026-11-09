@@ -1,5 +1,5 @@
 import { expect, test as base } from '@playwright/test';
-import { FRONTEND_URL, WORKER_URL } from '../../fixtures/test-helpers';
+import { FRONTEND_URL, WORKER_URL, addAdminSession } from '../../fixtures/test-helpers';
 
 const ADMIN_HEADERS = { 'x-admin-auth': 'e2e-admin-pass' };
 
@@ -28,8 +28,8 @@ for (const locale of ['en', 'zh']) {
         emailRuleSettings: { emailForwardingList: [{ domains: [], forward: 'target@test.example.com' }] },
       },
     })).ok()).toBe(true);
+    await addAdminSession(page);
     await page.addInitScript(() => {
-      localStorage.setItem('adminAuth', 'e2e-admin-pass');
       sessionStorage.setItem('adminTab', 'qucickSetup');
     });
     const openConfig = async () => {
@@ -80,8 +80,8 @@ for (const locale of ['en', 'zh']) {
           },
         },
       })).ok()).toBe(true);
+      await addAdminSession(page);
       await page.addInitScript(() => {
-        localStorage.setItem('adminAuth', 'e2e-admin-pass');
         sessionStorage.setItem('adminTab', 'qucickSetup');
       });
       const openConfig = async () => {

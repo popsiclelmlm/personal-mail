@@ -6,6 +6,7 @@ import { useRouter } from 'vue-router'
 import { useGlobalState } from '../store'
 import { api } from '../api'
 import { getRouterPathWithLang, hashPassword } from '../utils'
+import { getAdminTokenExpiry } from '../utils/admin-token'
 import Turnstile from '../components/Turnstile.vue'
 
 import SenderAccess from './admin/SenderAccess.vue'
@@ -34,7 +35,7 @@ import RedeemCodes from './admin/RedeemCodes.vue';
 import InviteCodes from './admin/InviteCodes.vue';
 
 const {
-  adminAuth, showAdminAuth, adminTab, loading,
+  adminToken, showAdminAuth, adminTab, loading,
   globalTabplacement, showAdminPage, userSettings,
   openSettings, showUserSystem
 } = useGlobalState()
@@ -52,14 +53,17 @@ const turnstileRef = ref(null)
 
 const authFunc = async () => {
   try {
-    await api.fetch('/open_api/admin_login', {
+    // 只发密码的摘要；服务端校验后签发短期会话令牌，浏览器里只保存令牌
+    const res = await api.fetch('/open_api/admin_login', {
       method: 'POST',
       body: JSON.stringify({
         password: await hashPassword(tmpAdminAuth.value),
         cf_token: cfToken.value
       })
     });
-    adminAuth.value = tmpAdminAuth.value;
+    if (!res?.token) throw new Error(t('loginFailed'));
+    adminToken.value = res.token;
+    tmpAdminAuth.value = '';
     location.reload()
   } catch (error) {
     message.error(error.message || "error");
@@ -68,16 +72,29 @@ const authFunc = async () => {
 }
 
 const showLogoutModal = ref(false)
+const showLogoutAllModal = ref(false)
 
-const handleLogout = async () => {
-  // 清空管理员认证
-  adminAuth.value = '';
+const handleLogout = async (successMessage = t('logoutSuccess')) => {
+  // 清空管理员会话令牌
+  adminToken.value = '';
   // 重置管理员相关状态
   showAdminAuth.value = false;
   adminTab.value = 'account';
   // 显示成功提示并跳转
-  message.success(t('logoutSuccess'));
+  message.success(successMessage);
   await router.push(getRouterPathWithLang('/', locale.value));
+}
+
+// 退出所有设备：服务端令牌版本加 1，所有已签发的管理员令牌（包括被盗走的）立即失效
+const handleLogoutAll = async () => {
+  try {
+    await api.fetch('/admin/logout_all', { method: 'POST' });
+  } catch (error) {
+    message.error(error.message || "error");
+    return;
+  }
+  showLogoutAllModal.value = false;
+  await handleLogout(t('logoutAllSuccess'));
 }
 
 const { t, locale } = useScopedI18n('views.Admin')
@@ -85,11 +102,16 @@ const { t, locale } = useScopedI18n('views.Admin')
 const showAdminPasswordModal = computed(() => !showAdminPage.value || showAdminAuth.value)
 const tmpAdminAuth = ref('')
 // 判断是否通过 admin password 登录（而非用户管理员权限）
-const isAdminPasswordLogin = computed(() => !!adminAuth.value)
+const isAdminPasswordLogin = computed(() => !!adminToken.value)
+// 本次管理员登录的到期时间
+const adminTokenExpiresAt = computed(() => {
+  const expiry = getAdminTokenExpiry(adminToken.value);
+  return expiry ? new Date(expiry).toLocaleString() : '';
+})
 
 // 获取当前登录方式
 const currentLoginMethod = computed(() => {
-  if (adminAuth.value) {
+  if (adminToken.value) {
     return t('loginViaPassword');
   } else if (userSettings.value.is_admin) {
     return t('loginViaUserAdmin');
@@ -231,9 +253,15 @@ onMounted(async () => {
             <n-space vertical>
               <n-text strong>{{ t('loginMethod') }}</n-text>
               <n-text>{{ currentLoginMethod }}</n-text>
+              <n-text v-if="isAdminPasswordLogin && adminTokenExpiresAt" depth="3">
+                {{ t('sessionExpiresAt', { time: adminTokenExpiresAt }) }}
+              </n-text>
               <n-divider v-if="isAdminPasswordLogin" />
               <n-button v-if="isAdminPasswordLogin" type="warning" @click="showLogoutModal = true" block>
                 {{ t('logout') }}
+              </n-button>
+              <n-button v-if="isAdminPasswordLogin" type="error" secondary @click="showLogoutAllModal = true" block>
+                {{ t('logoutAll') }}
               </n-button>
             </n-space>
           </n-card>
@@ -246,7 +274,15 @@ onMounted(async () => {
     <n-modal v-model:show="showLogoutModal" preset="dialog" :title="t('logoutConfirmTitle')">
       <p>{{ t('logoutConfirmContent') }}</p>
       <template #action>
-        <n-button :loading="loading" @click="handleLogout" size="small" tertiary type="warning">
+        <n-button :loading="loading" @click="handleLogout()" size="small" tertiary type="warning">
+          {{ t('confirm') }}
+        </n-button>
+      </template>
+    </n-modal>
+    <n-modal v-model:show="showLogoutAllModal" preset="dialog" :title="t('logoutAll')">
+      <p>{{ t('logoutAllConfirmContent') }}</p>
+      <template #action>
+        <n-button :loading="loading" @click="handleLogoutAll" size="small" tertiary type="error">
           {{ t('confirm') }}
         </n-button>
       </template>

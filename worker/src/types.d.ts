@@ -56,6 +56,8 @@ type Bindings = {
     DOMAIN_LABELS: string | string[] | undefined
     PASSWORDS: string | string[] | undefined
     ADMIN_PASSWORDS: string | string[] | undefined
+    // 管理员会话令牌有效期（秒），默认 8 小时，范围 1 分钟到 7 天
+    ADMIN_TOKEN_TTL_SECONDS: string | number | undefined
     ADMIN_API_IP_WHITELIST: string | string[] | undefined
     DISABLE_ADMIN_PASSWORD_CHECK: string | boolean | undefined
     JWT_SECRET: string

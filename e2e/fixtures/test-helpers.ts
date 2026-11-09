@@ -1,4 +1,4 @@
-import type { APIRequestContext } from '@playwright/test';
+import type { APIRequestContext, Page } from '@playwright/test';
 import { createHash } from 'crypto';
 import WebSocket from 'ws';
 
@@ -18,6 +18,27 @@ export const TEST_DOMAIN = 'test.example.com';
  */
 export function hashPassword(password: string): string {
   return createHash('sha256').update(password).digest('hex');
+}
+
+/**
+ * Open the admin console as the password admin: exchange the admin password for a
+ * short-lived session token and store it before the page loads. The frontend no longer
+ * keeps the admin password (the legacy `adminAuth` key is purged on start).
+ */
+export async function addAdminSession(
+  page: Page,
+  workerUrl: string = WORKER_URL,
+  password: string = 'e2e-admin-pass',
+): Promise<string> {
+  const res = await page.request.post(`${workerUrl}/open_api/admin_login`, {
+    data: { password: hashPassword(password), cf_token: '' },
+  });
+  if (!res.ok()) throw new Error(`admin login failed: ${res.status()} ${await res.text()}`);
+  const { token } = await res.json();
+  await page.addInitScript((value) => {
+    localStorage.setItem('adminToken', value);
+  }, token);
+  return token;
 }
 
 /**

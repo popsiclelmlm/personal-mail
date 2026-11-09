@@ -822,6 +822,26 @@ export const MESSAGE_REGISTRY = {
       "en": "Logout successful",
       "zh": "退出成功"
     },
+    "logoutAll": {
+      "en": "Log out on all devices",
+      "zh": "退出所有设备"
+    },
+    "logoutAllConfirmContent": {
+      "en": "All admin sessions signed in with the admin password, including this one, will end immediately and need to sign in again. Continue?",
+      "zh": "所有用管理员密码登录的后台会话（包括当前这个）都会立即失效，需要重新登录。确定继续吗？"
+    },
+    "logoutAllSuccess": {
+      "en": "Logged out on all devices",
+      "zh": "已退出所有设备"
+    },
+    "sessionExpiresAt": {
+      "en": "This sign-in expires at {time}",
+      "zh": "本次登录有效期至 {time}"
+    },
+    "loginFailed": {
+      "en": "Sign-in failed, please try again",
+      "zh": "登录失败，请重试"
+    },
     "mailWebhook": {
       "en": "Mail Webhook",
       "zh": "邮件 Webhook"

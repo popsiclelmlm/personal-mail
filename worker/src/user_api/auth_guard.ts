@@ -5,7 +5,7 @@
 export const AUTH_GUARD_MAX_FAILURES = 5;
 export const AUTH_GUARD_LOCK_SECONDS = 15 * 60;
 
-export type AuthGuardScope = 'login' | 'verify_code' | 'recovery_email';
+export type AuthGuardScope = 'login' | 'verify_code' | 'recovery_email' | 'admin_login';
 
 type GuardKV = Pick<KVNamespace, 'get' | 'put' | 'delete'>;
 

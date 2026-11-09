@@ -1,6 +1,6 @@
 import { Context, Hono } from 'hono'
 
-import { getUserRoles } from '../utils'
+import { bumpAdminTokenVersion, getUserRoles } from '../utils'
 import address_api from './address_api'
 import address_sender_api from './address_sender_api'
 import sendbox_api from './sendbox_api'
@@ -89,6 +89,13 @@ api.post('/admin/mail_webhook/check_filter', mail_webhook_settings.checkWebhookF
 
 // worker config
 api.get('/admin/worker/configs', worker_config.getConfig)
+
+// 退出所有设备：管理员令牌版本加 1，所有已签发的管理员会话令牌立即失效
+// （明文密码请求头和「管理员角色用户」不受影响）
+api.post('/admin/logout_all', async (c) => {
+    const version = await bumpAdminTokenVersion(c);
+    return c.json({ success: true, version })
+})
 
 // send mail by admin
 api.post('/admin/send_mail', sendMailbyAdmin)

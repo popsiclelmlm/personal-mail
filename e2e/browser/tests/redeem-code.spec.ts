@@ -6,6 +6,8 @@ import {
   FRONTEND_URL,
   FRONTEND_URL_ENV_OFF,
   WORKER_URL,
+  addAdminSession,
+  WORKER_URL_ENV_OFF,
 } from '../../fixtures/test-helpers';
 
 const ADMIN_HEADERS = { 'x-admin-auth': 'e2e-admin-pass' };
@@ -213,8 +215,8 @@ test('Admin can batch-create, search, export, and display a redemption result', 
   let code = '';
   const user = await createUser(request);
   try {
+    await addAdminSession(page);
     await page.addInitScript(() => {
-      localStorage.setItem('adminAuth', 'e2e-admin-pass');
       sessionStorage.setItem('adminTab', 'redeemCodes');
     });
     await page.goto(`${FRONTEND_URL}/en/admin`);
@@ -312,8 +314,8 @@ test('Admin ignores a stale list response after switching redemption type', asyn
       }),
     });
   });
+  await addAdminSession(page);
   await page.addInitScript(() => {
-    localStorage.setItem('adminAuth', 'e2e-admin-pass');
     sessionStorage.setItem('adminTab', 'redeemCodes');
   });
   await page.goto(`${FRONTEND_URL}/en/admin`);
@@ -342,8 +344,8 @@ for (const { locale, roleRequired, roleType, addressType, create, generate, pref
   },
 ]) {
   test(`Admin validates missing role and invalid prefix in ${locale}`, async ({ page }) => {
+    await addAdminSession(page);
     await page.addInitScript(() => {
-      localStorage.setItem('adminAuth', 'e2e-admin-pass');
       sessionStorage.setItem('adminTab', 'redeemCodes');
     });
     let createRequests = 0;
@@ -378,9 +380,7 @@ test('the disabled frontend hides the entry and redirects the page', async ({ pa
   await expect(page).not.toHaveURL(/\/redeem$/);
   await expect(page.getByTestId('redeem-entry')).toHaveCount(0);
 
-  await page.addInitScript(() => {
-    localStorage.setItem('adminAuth', 'e2e-admin-pass');
-  });
+  await addAdminSession(page, WORKER_URL_ENV_OFF);
   await page.goto(`${FRONTEND_URL_ENV_OFF}/en/admin`);
   await expect(page.getByTestId('redeem-admin-create')).toHaveCount(0);
   await expect(page.getByText('Redemption Codes', { exact: true })).toHaveCount(0);

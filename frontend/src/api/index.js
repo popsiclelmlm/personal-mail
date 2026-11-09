@@ -14,7 +14,7 @@ const API_BASE = APP_CONFIG.API_BASE || "";
 const {
     loading, auth, jwt, settings, openSettings,
     userOpenSettings, userSettings, announcement,
-    showAuth, adminAuth, showAdminAuth, userJwt, showUserSystem
+    showAuth, adminToken, showAdminAuth, userJwt, showUserSystem
 } = useGlobalState();
 
 const instance = axios.create({
@@ -53,7 +53,9 @@ const apiFetch = async (path, options = {}) => {
         if (userAccessHeader) headers['x-user-access-token'] = userAccessHeader;
         const customAuthHeader = safeHeaderValue(auth.value);
         if (customAuthHeader) headers['x-custom-auth'] = customAuthHeader;
-        const adminAuthHeader = safeHeaderValue(adminAuth.value);
+        // 管理员会话令牌（登录后服务端签发，前端不保存管理员密码）
+        const sentAdminToken = adminToken.value;
+        const adminAuthHeader = safeHeaderValue(sentAdminToken);
         if (adminAuthHeader) headers['x-admin-auth'] = adminAuthHeader;
         const authorizationHeader = safeBearerHeader(jwt.value);
         if (authorizationHeader) headers['Authorization'] = authorizationHeader;
@@ -65,6 +67,8 @@ const apiFetch = async (path, options = {}) => {
         });
         const response = await interceptResponse(path, initialResponse);
         if (ErrorCode.isAdminAuthError(response)) {
+            // 令牌过期或被吊销：清掉这次发出去的令牌（期间重新登录拿到的新令牌不受影响），回到登录框
+            if (sentAdminToken && adminToken.value === sentAdminToken) adminToken.value = '';
             showAdminAuth.value = true;
         }
         if (ErrorCode.isSiteAuthError(response)) {

@@ -34,6 +34,12 @@ test.describe('Turnstile Login Endpoints (ENABLE_GLOBAL_TURNSTILE_CHECK disabled
       expect(res.ok()).toBe(true);
       const body = await res.json();
       expect(body.success).toBe(true);
+      // 登录后拿到的是短期会话令牌，不含管理员密码，能直接访问管理接口
+      expect(body.token).toMatch(/^eyJ[\w-]*\.[\w-]+\.[\w-]+$/);
+      expect(body.token).not.toContain('e2e-admin-pass');
+      expect(body.expires_at).toBeGreaterThan(Math.floor(Date.now() / 1000));
+      const admin = await request.get(`${WORKER_URL}/admin/statistics`, { headers: { 'x-admin-auth': body.token } });
+      expect(admin.ok()).toBe(true);
     });
 
     test('wrong password returns 401', async ({ request }) => {

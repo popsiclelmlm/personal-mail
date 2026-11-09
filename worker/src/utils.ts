@@ -1,5 +1,7 @@
 import { Context } from "hono";
 import { parseSecretList } from './secret_list';
+import { ADMIN_TOKEN_VERSION_KEY, AdminHeaderResult, checkAdminAuthHeader, normalizeAdminTokenVersion } from './admin_token';
+import { authGuardKey, isAuthLocked, recordAuthFailure } from './user_api/auth_guard';
 import { UserSettings, RoleAddressConfig } from "./models";
 import { CONSTANTS } from "./constants";
 
@@ -313,11 +315,40 @@ export const getAdminPasswords = (c: Context<HonoCustomType>): string[] => {
     return parseSecretList(c.env.ADMIN_PASSWORDS, "ADMIN_PASSWORDS");
 }
 
-export const checkIsAdmin = (c: Context<HonoCustomType>): boolean => {
-    const adminPasswords = getAdminPasswords(c);
-    if (!adminPasswords.length) return false;
-    const adminAuth = c.req.raw.headers.get("x-admin-auth");
-    return !!adminAuth && adminPasswords.includes(adminAuth);
+// 管理员登录接口和 x-admin-auth 明文密码共用同一个失败计数（按 IP），连续失败 5 次锁定 15 分钟
+export const adminAuthGuardKey = (c: Context<HonoCustomType>): string => (
+    authGuardKey('admin_login', c.req.raw.headers.get("cf-connecting-ip"), 'admin')
+)
+
+/** 当前的管理员令牌版本；settings 表里没有（或还没建表）时为 0 */
+export const getAdminTokenVersion = async (c: Context<HonoCustomType>): Promise<number> => (
+    normalizeAdminTokenVersion(await getSetting(c, ADMIN_TOKEN_VERSION_KEY))
+)
+
+/** 管理员令牌版本加 1，让所有已签发的管理员令牌失效，返回新版本 */
+export const bumpAdminTokenVersion = async (c: Context<HonoCustomType>): Promise<number> => {
+    const next = Math.max(await getAdminTokenVersion(c), 0) + 1;
+    await saveSetting(c, ADMIN_TOKEN_VERSION_KEY, String(next));
+    return next;
+}
+
+/**
+ * 校验 x-admin-auth：管理员会话令牌，或（兼容脚本和旧版前端）明文管理员密码。
+ * 返回 'ok' 才算管理员；'locked' 表示明文密码失败次数过多；'none' 表示没带这个请求头。
+ */
+export const checkAdminAuth = async (
+    c: Context<HonoCustomType>
+): Promise<AdminHeaderResult | 'none'> => {
+    const guardKey = adminAuthGuardKey(c);
+    return checkAdminAuthHeader(c.req.raw.headers.get("x-admin-auth"), {
+        jwtSecret: c.env.JWT_SECRET,
+        passwords: getAdminPasswords(c),
+        getVersion: () => getAdminTokenVersion(c),
+        guard: {
+            isLocked: () => isAuthLocked(c.env.KV, guardKey),
+            recordFailure: () => recordAuthFailure(c.env.KV, guardKey),
+        },
+    });
 }
 
 export const getEnvStringList = (value: string | string[] | undefined): string[] => {
@@ -482,7 +513,7 @@ export default {
     getAnotherWorkerList,
     getPasswords,
     getAdminPasswords,
-    checkIsAdmin,
+    checkAdminAuth,
     getEnvStringList,
     isGlobalTurnstileEnabled,
     checkCfTurnstile,

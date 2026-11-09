@@ -14,6 +14,7 @@
 | `USER_ROLES[].personal_send_balance` | 地址升级为个人邮箱时初始化的发信额度（写进 `address_sender`）；不配置则沿用上游的发信额度规则 | — |
 | `REGISTER_WITH_PERSONAL_MAILBOX` | `true` 时注册表单改成「名字@个人邮箱域名」：账号就是这个地址，注册时自动建好对应的个人邮箱（永久、关闭邮箱凭证登录、占 1 个永久邮箱额度），用它登录，不再填站外邮箱。这种方式不走邮件验证和站外邮箱白名单；找回密码靠选填的辅助邮箱（见下文），否则只能由管理员重设。需要同时配置 `PERSONAL_MAIL_DOMAINS` | `false` |
 | `PERSONAL_MAIL_DOMAINS` | 个人邮箱专用域名（必须同时写在 `DOMAINS` 里）。这些域名不出现在临时邮箱里，匿名用户和登录用户都不能用它们建临时地址，只能在「邮箱」页直接创建为个人邮箱；管理员建地址不受限制 | — |
+| `ADMIN_TOKEN_TTL_SECONDS` | 管理后台会话令牌的有效期（秒），范围 60 秒到 7 天，超出时取边界（见「管理后台登录」） | `28800`（8 小时） |
 
 产品名称默认显示 Magpiess Mail（前端 i18n 的 `title`），不需要再设置 `TITLE`。
 
@@ -34,6 +35,22 @@
 - **登录提示**：账号不存在和密码错误返回同一条提示，账号不存在时也会算一次哈希，避免探测账号。
 - **重设密码**：`POST /user_api/reset_password`（邮箱 + 验证码 + 新密码），需要后台开启邮件验证并设置验证码发件地址；成功后给账号邮箱发通知。注册接口不再覆盖已有账号。
 - **退出所有设备**：`POST /user_api/logout_all`，用户设置页有入口。
+
+## 管理后台登录（会话令牌）
+
+上游把管理员密码明文存在浏览器 localStorage 的 `adminAuth` 里，每个请求都带上；页面一旦被 XSS，攻击者就能直接拿到密码。现在改成短期会话令牌：
+
+- **登录**：`POST /open_api/admin_login` 照旧接收密码的 SHA-256 摘要（和 Turnstile 的 `cf_token`），校验通过后返回 `{ success, token, expires_at }`。前端只把令牌存在 localStorage 的 `adminToken`，不再保存密码；旧版前端留下的 `adminAuth` 在页面加载时自动删除，升级后浏览器里的管理员要重新登录一次。
+- **令牌**：HS256，签名密钥由 `JWT_SECRET` 派生（和用户令牌、邮箱凭证互不通用），内容只有类型、版本号 `av`、密码绑定值 `ph`（签发时所用管理员密码的 HMAC 片段，推不出密码）和签发、过期时间。默认 8 小时过期，用 `ADMIN_TOKEN_TTL_SECONDS` 调整。
+- **过期和失效**：前端在到期时自动清掉令牌、回到登录框；任何管理接口返回 401 时也会清掉令牌。以下情况已签发的令牌立即失效：
+  - 后台「管理员 → 退出所有设备」（`POST /admin/logout_all`）：设置表里的 `admin_token_version` 加 1，所有管理员令牌（包括被盗走的）都要重新登录；
+  - 从 `ADMIN_PASSWORDS` 删掉或改掉签发时用的那个密码；
+  - 更换 `JWT_SECRET`（用户也要全部重新登录）。
+  - 进不了后台时也可以直接改库：`npx wrangler d1 execute <数据库名> --remote --command "INSERT INTO settings (key, value) VALUES ('admin_token_version', '<当前值加 1>') ON CONFLICT(key) DO UPDATE SET value = excluded.value"`。
+- **单个退出**：「退出登录」只清掉本机的令牌（令牌是无状态的）；担心令牌已泄露时用「退出所有设备」。
+- **兼容脚本**：`x-admin-auth` 仍接受明文管理员密码，脚本和旧版前端不用改。形如 JWT 的值（`eyJ` 开头的三段）按令牌校验，其他值按密码校验，所以带点的密码（如 `my.admin.pass`）照样能用。
+- **失败锁定**：后台登录和 `x-admin-auth` 明文密码共用一个按 IP 的失败计数，连续失败 5 次锁定 15 分钟（返回 429，锁定期间正确的明文密码也不认，已登录的令牌不受影响）。原来可以绕过登录接口的人机验证、直接用请求头暴力猜密码，现在也会被锁定。没有 KV 绑定时不锁定。
+- 「管理员角色用户」（`ADMIN_USER_ROLE`）和 `DISABLE_ADMIN_PASSWORD_CHECK` 的行为不变。
 
 ## 邀请码
 
@@ -124,5 +141,7 @@ cp scripts/personal-mail/wrangler.local.toml worker/wrangler.toml
 cd worker && pnpm exec wrangler dev --port 8797 --test-scheduled
 node scripts/personal-mail/local-verify.mjs all
 ```
+
+`all` 包含第 1–4 阶段和 `admin`（管理后台会话令牌）阶段，第 5 阶段要单独跑；也可以只跑 `node scripts/personal-mail/local-verify.mjs admin`。
 
 单元测试：`cd e2e && npm run test:unit`（用 Node 内置的 `node:sqlite` 模拟 D1，见 `e2e/unit/d1-sqlite.mjs`）。

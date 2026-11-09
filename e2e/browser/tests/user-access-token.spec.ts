@@ -100,7 +100,8 @@ for (const scenario of ['expired', 'expiring', 'valid', 'no account', 'login exp
       const state = (await import(storeModule)).useGlobalState();
       state.userJwt.value = scenario === 'no account' ? '' : 'account-token';
       state.userSettings.value.access_token = initialToken;
-      state.adminAuth.value = scenario === 'wrong password' ? 'wrong-password' : '';
+      // 管理员会话令牌（形如 JWT、未过期即可，这里的接口都被 mock 掉了）
+      state.adminToken.value = scenario === 'wrong password' ? `eyJhbGciOiJIUzI1NiJ9.${btoa(JSON.stringify({ typ: 'admin', exp: Math.floor(Date.now() / 1000) + 3600 })).replace(/=+$/, '').replace(/\+/g, '-').replace(/\//g, '_')}.c2ln` : '';
       state.showAdminAuth.value = false;
       try {
         return { data: await api.fetch(path), error: null, showAdminAuth: state.showAdminAuth.value };
@@ -230,7 +231,7 @@ for (const failure of [400, 401, 500, 'network'] as const) {
       const state = (await import(storeModule)).useGlobalState();
       state.userJwt.value = 'account-token';
       state.userSettings.value.access_token = initialToken;
-      state.adminAuth.value = '';
+      state.adminToken.value = '';
       state.openSettings.value.needAuth = true;
       state.showAuth.value = false;
       state.showAdminAuth.value = false;
@@ -296,7 +297,7 @@ for (const changedCredential of ['account', 'mailbox'] as const) {
       state.userJwt.value = 'account-token';
       state.jwt.value = 'mailbox-token';
       state.userSettings.value.access_token = initialToken;
-      state.adminAuth.value = '';
+      state.adminToken.value = '';
       try {
         await api.fetch(path, { method: path === '/api/send_mail' ? 'POST' : 'GET' });
         return null;
@@ -378,7 +379,7 @@ for (const [scenario, query] of [
         state.userJwt.value = userJwt;
         state.userSettings.value.access_token = expiredAccessToken;
         state.jwt.value = mailboxJwt;
-        state.adminAuth.value = '';
+        state.adminToken.value = '';
         return api.fetch(`/api/settings${query}`);
       }, { userJwt, expiredAccessToken, mailboxJwt: address.jwt, query });
       expect(settings.address).toBe(address.address);

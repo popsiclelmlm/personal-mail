@@ -1,11 +1,11 @@
 import { expect, test, type Page } from '@playwright/test';
 import { readFile } from 'node:fs/promises';
 import { parse } from 'csv-parse/sync';
-import { FRONTEND_URL, WORKER_URL } from '../../fixtures/test-helpers';
+import { FRONTEND_URL, WORKER_URL, addAdminSession } from '../../fixtures/test-helpers';
 
 async function openCreate(page: Page, locale = 'en', domains = ['test.example.com', 'other.example.com']) {
+  await addAdminSession(page);
   await page.addInitScript(() => {
-    localStorage.setItem('adminAuth', 'e2e-admin-pass');
     sessionStorage.setItem('adminTab', 'account');
   });
   await page.route('**/open_api/settings', async route => {

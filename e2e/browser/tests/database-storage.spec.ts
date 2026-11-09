@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test';
-import { FRONTEND_URL, WORKER_URL } from '../../fixtures/test-helpers';
+import { FRONTEND_URL, WORKER_URL, addAdminSession } from '../../fixtures/test-helpers';
 
 const ADMIN_HEADERS = { 'x-admin-auth': 'e2e-admin-pass' };
 
@@ -10,8 +10,8 @@ test('persists the selected D1 plan and restores it after reload', async ({ page
   });
   expect(seedResponse.ok()).toBe(true);
 
+  await addAdminSession(page);
   await page.addInitScript(() => {
-    localStorage.setItem('adminAuth', 'e2e-admin-pass');
     sessionStorage.setItem('adminTab', 'qucickSetup');
   });
   await page.goto(`${FRONTEND_URL}/en/admin`);

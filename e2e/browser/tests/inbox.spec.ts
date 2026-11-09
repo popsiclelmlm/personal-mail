@@ -5,6 +5,7 @@ import {
   createTestAddress,
   seedTestMail,
   deleteAddress,
+  addAdminSession,
 } from '../../fixtures/test-helpers';
 import { request as apiRequest } from '@playwright/test';
 
@@ -457,8 +458,8 @@ for (const width of [1360, 320]) {
       const from = 'sender@test.example.com';
       await seedTestMail(api, mailbox.address, { subject, from });
       await page.setViewportSize({ width, height: 900 });
+      await addAdminSession(page);
       await page.addInitScript(() => {
-        localStorage.setItem('adminAuth', 'e2e-admin-pass');
         sessionStorage.setItem('adminTab', 'mails');
       });
       for (const labels of [

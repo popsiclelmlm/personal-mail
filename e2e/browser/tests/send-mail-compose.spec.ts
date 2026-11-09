@@ -4,6 +4,7 @@ import {
   createTestAddress,
   deleteAddress,
   requestSendAccess,
+  addAdminSession,
 } from '../../fixtures/test-helpers';
 
 const expectEditorOriginsToAlign = async (page: Page) => {
@@ -111,8 +112,8 @@ test.describe('Send mail composer', () => {
   });
 
   test('keeps the Admin field order and editor placeholder aligned', async ({ page }) => {
+    await addAdminSession(page);
     await page.addInitScript(() => {
-      localStorage.setItem('adminAuth', 'e2e-admin-pass');
       sessionStorage.setItem('adminTab', 'mails');
     });
     await page.goto(`${FRONTEND_URL}/en/admin`);

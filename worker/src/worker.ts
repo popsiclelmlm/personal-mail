@@ -16,7 +16,7 @@ import i18n from './i18n';
 import { ErrorCode } from './error_codes';
 import { email } from './email';
 import { scheduled } from './scheduled';
-import { getPasswords, getBooleanValue, getDomains, checkIsAdmin, getEnvStringList } from './utils';
+import { getPasswords, getBooleanValue, getDomains, checkAdminAuth, getEnvStringList } from './utils';
 import { checkAccessControl } from './ip_blacklist';
 import { isUserTokenCurrent } from './user_api/user_token';
 import { withFrontendSecurityHeaders } from './security_headers';
@@ -263,10 +263,14 @@ app.use('/admin/*', async (c, next) => {
 		console.error("Failed to check admin API IP whitelist", e);
 	}
 
-	// check header x-admin-auth
-	if (checkIsAdmin(c)) {
+	// check header x-admin-auth：管理员会话令牌，或（兼容脚本）明文管理员密码
+	const adminAuthResult = await checkAdminAuth(c);
+	if (adminAuthResult === 'ok') {
 		await next();
 		return;
+	}
+	if (adminAuthResult === 'locked') {
+		return c.text(msgs.TooManyAttemptsMsg, 429);
 	}
 	// check if user is admin
 	const access_token = c.req.raw.headers.get("x-user-access-token");
