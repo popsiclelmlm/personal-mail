@@ -93,6 +93,15 @@ Workers 免费版不能用 Cloudflare 的 `send_email` 向任意地址发信（�
 
 本地验证可以用 Cloudflare 的测试密钥（Site Key `1x00000000000000000000AA`，Secret `1x0000000000000000000000000000000AA`，总是通过），`wrangler dev` 时用 `--var` 传入。
 
+## 隐私政策
+
+`/privacy-policy`（也支持 `/en/privacy-policy` 这类语言前缀）是隐私政策与使用规范，页脚和注册按钮下方有入口。正文在 `frontend/src/views/legal/privacy-policy-content.js`，只维护中文和英文，其他界面语言显示英文；修改时两种语言一起改，并更新日期。
+
+「联系我们」显示上游的 `ADMIN_CONTACT`（像邮箱时显示成 mailto 链接；没配置时显示「本站管理员」）。用站内地址当联系方式时：
+
+1. 在库里预留这个地址（永久、无主、关闭凭证登录），例如 `INSERT INTO address (name, source_meta, retention_type, is_permanent, credential_login_disabled) VALUES ('privacy@个人邮箱域名', 'admin:reserved-contact', 'permanent', 1, 1)`；来信在管理后台查看。
+2. 把名字加进 `ADDRESS_CHECK_REGEX`，防止地址被删后别人注册。
+
 ## 自动清理
 
 所有清理任务（按创建时间、不活跃、未绑定、空地址、邮件、发件箱）都跳过：
