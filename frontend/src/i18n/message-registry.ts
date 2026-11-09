@@ -541,7 +541,8 @@ export const MESSAGE_REGISTRY = {
     "copyright": {
       "en": "Copyright",
       "zh": "版权所有"
-    }
+    },
+    "privacyPolicy": { "en": "Privacy Policy", "zh": "隐私政策" }
   },
   "views.user.UserSettings": {
     "recoveryEmail": { "en": "Recovery email", "zh": "辅助邮箱" },
@@ -1210,6 +1211,8 @@ export const MESSAGE_REGISTRY = {
     "recoveryEmail": { "en": "Recovery email (optional)", "zh": "辅助邮箱（可选）" },
     "recoveryEmailTip": { "en": "Used to reset your password. Use an outside mailbox, not one on this site.", "zh": "用来找回密码，请填站外的常用邮箱，不能用本站的地址。" },
     "recoveryEmailPlaceholder": { "en": "e.g. your Gmail or Outlook address", "zh": "例如你的 QQ 邮箱或 Gmail" },
+    "agreePolicyPrefix": { "en": "By signing up you agree to the ", "zh": "注册即表示你已阅读并同意" },
+    "agreePolicyLink": { "en": "Privacy Policy and Acceptable Use", "zh": "《隐私政策与使用规范》" },
     "confirmSignupTitle": { "en": "Sign up with this address?", "zh": "确认用这个地址注册？" },
     "confirmSignupTip": { "en": "The address cannot be changed after sign-up. You will log in with it.", "zh": "注册后地址不能修改，以后用它登录。" },
     "confirmSignupRecovery": { "en": "Recovery email: {email}", "zh": "辅助邮箱：{email}" },

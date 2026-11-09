@@ -35,6 +35,8 @@ const menuValue = computed(() => {
     if (route.path.includes("mailbox")) return "mailbox";
     if (route.path.includes("user")) return "user";
     if (route.path.includes("admin")) return "admin";
+    // 隐私政策页不属于任何导航项，不高亮
+    if (route.path.includes("privacy-policy")) return "";
     return "home";
 });
 

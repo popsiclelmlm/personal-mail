@@ -6,7 +6,7 @@ import { KeyFilled } from '@vicons/material'
 
 import { api } from '../../api';
 import { useGlobalState } from '../../store'
-import { hashPassword } from '../../utils';
+import { hashPassword, getRouterPathWithLang } from '../../utils';
 import { startAuthentication } from '@simplewebauthn/browser';
 
 import Turnstile from '../../components/Turnstile.vue';
@@ -17,7 +17,7 @@ const {
 } = useGlobalState()
 const message = useMessage();
 
-const { t } = useScopedI18n('views.user.UserLogin')
+const { t, locale } = useScopedI18n('views.user.UserLogin')
 
 // 登录成功：先切回加载骨架屏，再写入令牌并刷新页面，
 // 避免刷新前的一瞬间还停在登录表单上、闪出「登录信息已过期」
@@ -364,6 +364,10 @@ onMounted(async () => {
                 <n-button @click="emailSignup" type="primary" block secondary strong>
                     {{ t('register') }}
                 </n-button>
+                <n-text depth="3" class="agree-policy">
+                    {{ t('agreePolicyPrefix') }}<a :href="getRouterPathWithLang('/privacy-policy', locale)"
+                        target="_blank" rel="noopener">{{ t('agreePolicyLink') }}</a>
+                </n-text>
             </n-tab-pane>
         </n-tabs>
         <n-modal v-model:show="showSignupConfirm" preset="dialog" :title="t('confirmSignupTitle')"
@@ -414,6 +418,13 @@ onMounted(async () => {
 </template>
 
 <style scoped>
+.agree-policy {
+    display: block;
+    margin-top: 10px;
+    font-size: 12px;
+    text-align: center;
+}
+
 .center {
     display: flex;
     text-align: center;
