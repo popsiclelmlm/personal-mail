@@ -478,7 +478,6 @@ export const deMessages = {
   "views.common.Login.credentialInput": "Bitte die Zugangsdaten der Mailadresse eingeben",
   "views.admin.SenderAccess.modalTip": "Bitte das Sendeguthaben eingeben",
   "views.user.UserLogin.pleaseLogin": "Bitte anmelden",
-  "views.common.Login.pleaseGetNewEmail": "Bitte anmelden oder auf „Neue E-Mail erstellen“ klicken, um eine neue Adresse zu erhalten.",
   "components.WebhookComponent.fillInDemoTip": "Bitte URL und weitere Einstellungen an deine Umgebung anpassen",
   "components.SendBox.pleaseSelectMail": "Bitte eine E-Mail zum Anzeigen auswählen.",
   "views.admin.Account.pleaseSelectAddress": "Bitte eine Adresse auswählen",

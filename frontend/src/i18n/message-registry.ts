@@ -3301,9 +3301,21 @@ export const MESSAGE_REGISTRY = {
       "en": "Password Login",
       "zh": "密码登录"
     },
-    "pleaseGetNewEmail": {
-      "en": "Please login or click \"Get New Email\" button to get a new email address",
-      "zh": "请\"登录\"或点击 \"注册新邮箱\" 按钮来获取一个新的邮箱地址"
+    "helpCreate": {
+      "en": "Click \"{create}\", pick a domain and enter a name (or generate one). The address can receive mail right away.",
+      "zh": "点「{create}」，选一个域名，输入名字（也可以随机生成），新地址马上就能收信。"
+    },
+    "helpLogin": {
+      "en": "To reopen a temp mailbox you created before, paste its address credential and click \"{login}\".",
+      "zh": "要重新打开以前建的临时邮箱，粘贴它的地址凭证，再点「{login}」。"
+    },
+    "helpCredential": {
+      "en": "The address credential is shown right after the address is created. Keep it safe: without it you cannot reopen the mailbox. Temp mailboxes are not kept forever.",
+      "zh": "地址凭证在新建地址后显示，请妥善保存，丢了就无法再打开这个邮箱。临时邮箱不保证长期保留。"
+    },
+    "helpPersonal": {
+      "en": "Need a long-term address? Log in to your account on the Mailbox page and create a personal mailbox.",
+      "zh": "需要长期使用的地址？到「邮箱」页登录账号，创建个人邮箱。"
     },
     "randomSubdomainTip": {
       "en": "When enabled, the created address will use a random subdomain. Recommended for receiving only. Requires a wildcard MX DNS record on the base domain — see the random subdomain docs.",

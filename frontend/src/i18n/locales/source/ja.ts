@@ -478,7 +478,6 @@ export const jaMessages = {
   "views.common.Login.credentialInput": "メールアドレス資格情報を入力してください",
   "views.admin.SenderAccess.modalTip": "送信残高を入力してください",
   "views.user.UserLogin.pleaseLogin": "ログインしてください",
-  "views.common.Login.pleaseGetNewEmail": "ログインするか、「新しいメールを作成」をクリックして新しいアドレスを取得してください。",
   "components.WebhookComponent.fillInDemoTip": "URL とその他設定を自分のものに変更してください",
   "components.SendBox.pleaseSelectMail": "表示するメールを選択してください。",
   "views.admin.Account.pleaseSelectAddress": "アドレスを選択してください",

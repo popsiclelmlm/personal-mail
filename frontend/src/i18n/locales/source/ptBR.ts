@@ -478,7 +478,6 @@ export const ptBRMessages = {
   "views.common.Login.credentialInput": "Digite a credencial do endereço de e-mail",
   "views.admin.SenderAccess.modalTip": "Informe o saldo de envio",
   "views.user.UserLogin.pleaseLogin": "Faça login",
-  "views.common.Login.pleaseGetNewEmail": "Faça login ou clique em \"Criar novo e-mail\" para obter um novo endereço.",
   "components.WebhookComponent.fillInDemoTip": "Altere a URL e as demais configurações para as suas",
   "components.SendBox.pleaseSelectMail": "Selecione um e-mail para visualizar.",
   "views.admin.Account.pleaseSelectAddress": "Selecione um endereço",

@@ -384,9 +384,15 @@ onMounted(async () => {
                 </n-spin>
             </n-tab-pane>
             <n-tab-pane name="help" :tab="t('help')">
-                <n-alert :show-icon="false" :bordered="false">
-                    <span>{{ t('pleaseGetNewEmail') }}</span>
-                </n-alert>
+                <!-- 帮助：按钮名称和实际按钮一致，说明凭证和个人邮箱 -->
+                <ul class="help-list">
+                    <li v-if="showNewAddressTab">{{ t('helpCreate', { create: t('getNewEmail') }) }}</li>
+                    <li>{{ t('helpLogin', { login: loginAndBindTag }) }}</li>
+                    <li>{{ t('helpCredential') }}</li>
+                    <li v-if="openSettings.personalMailDomains?.length && !openSettings.disableUserSystem">
+                        {{ t('helpPersonal') }}
+                    </li>
+                </ul>
                 <AdminContact />
             </n-tab-pane>
         </n-tabs>
@@ -418,6 +424,13 @@ onMounted(async () => {
     font-size: 13px;
     line-height: 1.6;
     text-align: center;
+}
+
+.help-list {
+    margin: 12px 0;
+    padding-left: 20px;
+    line-height: 1.8;
+    text-align: left;
 }
 
 .switch-login-button {

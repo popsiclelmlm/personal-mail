@@ -478,7 +478,6 @@ export const esMessages = {
   "views.common.Login.credentialInput": "Introduce la credencial de la dirección de correo",
   "views.admin.SenderAccess.modalTip": "Introduce el saldo de envío",
   "views.user.UserLogin.pleaseLogin": "Inicia sesión",
-  "views.common.Login.pleaseGetNewEmail": "Inicia sesión o pulsa \"Crear nuevo correo\" para obtener una nueva dirección.",
   "components.WebhookComponent.fillInDemoTip": "Modifica la URL y el resto de ajustes por los tuyos",
   "components.SendBox.pleaseSelectMail": "Selecciona un correo para verlo.",
   "views.admin.Account.pleaseSelectAddress": "Selecciona una dirección",
