@@ -6,6 +6,7 @@ import { api } from '../../api'
 import { onMounted, watch } from 'vue';
 import { processItem } from '../../utils/email-parser'
 import { utcToLocalDate } from '../../utils';
+import { sanitizeMailHtml } from '../../utils/remote-content-policy';
 
 const { telegramApp, loading, useUTCDate } = useGlobalState()
 const route = useRoute()
@@ -59,7 +60,8 @@ onMounted(async () => {
             <n-tag v-if="showEMailTo" type="info">
                 TO: {{ curMail.address }}
             </n-tag>
-            <iframe :srcdoc="curMail.message" style="margin-top: 10px;width: 100%; height: 100%;">
+            <iframe :srcdoc="sanitizeMailHtml(curMail.message)" sandbox="allow-popups allow-popups-to-escape-sandbox"
+                style="margin-top: 10px;width: 100%; height: 100%;">
             </iframe>
         </n-card>
     </div>

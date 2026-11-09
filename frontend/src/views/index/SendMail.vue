@@ -54,8 +54,8 @@ const hasSendMailContent = (content, contentType) => {
         return normalizeSendMailText(content).length > 0
     }
 
-    const container = document.createElement('div')
-    container.innerHTML = content
+    // 解析成惰性文档：不会加载图片，也不会触发事件处理器
+    const container = new DOMParser().parseFromString(content, 'text/html').body
     container.querySelectorAll('script, style, noscript, template').forEach((node) => node.remove())
 
     const plainContent = normalizeSendMailText(container.textContent ?? '')

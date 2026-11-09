@@ -5,6 +5,7 @@ import { useScopedI18n } from '@/i18n/app'
 import { useGlobalState } from '../store'
 import { useIsMobile } from '../utils/composables'
 import { utcToLocalDate } from '../utils';
+import { sanitizeMailHtml } from '../utils/remote-content-policy';
 import { SendRound } from '@vicons/material'
 
 const message = useMessage()
@@ -273,7 +274,7 @@ onMounted(async () => {
             </n-space>
             <pre v-if="showCode" style="margin-top: 10px;">{{ curMail.raw }}</pre>
             <pre v-else-if="!curMail.is_html" style="margin-top: 10px;">{{ curMail.content }}</pre>
-            <div v-else v-html="curMail.content" style="margin-top: 10px;"></div>
+            <div v-else v-html="sanitizeMailHtml(curMail.content)" style="margin-top: 10px;"></div>
           </n-card>
           <n-card :bordered="false" embedded class="mail-item" v-else>
             <n-result status="info" :title="count === 0 ? t('emptySent') : t('pleaseSelectMail')">
@@ -345,7 +346,7 @@ onMounted(async () => {
             </n-space>
             <pre v-if="showCode" style="margin-top: 10px;">{{ curMail.raw }}</pre>
             <pre v-else-if="!curMail.is_html" style="margin-top: 10px;">{{ curMail.content }}</pre>
-            <div v-else v-html="curMail.content" style="margin-top: 10px;"></div>
+            <div v-else v-html="sanitizeMailHtml(curMail.content)" style="margin-top: 10px;"></div>
           </n-card>
         </n-drawer-content>
       </n-drawer>

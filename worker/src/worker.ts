@@ -19,6 +19,7 @@ import { scheduled } from './scheduled';
 import { getPasswords, getBooleanValue, getDomains, checkIsAdmin, getEnvStringList } from './utils';
 import { checkAccessControl } from './ip_blacklist';
 import { isUserTokenCurrent } from './user_api/user_token';
+import { withFrontendSecurityHeaders } from './security_headers';
 
 const API_PATHS = [
 	"/api/",
@@ -47,7 +48,8 @@ app.use('/*', async (c, next) => {
 		if (!url.pathname.includes('.')) {
 			url.pathname = ""
 		}
-		return c.env.ASSETS.fetch(url);
+		// 页面加上内容安全策略，邮件里的脚本即使漏过净化也执行不了
+		return withFrontendSecurityHeaders(await c.env.ASSETS.fetch(url));
 	}
 
 	// save language in context

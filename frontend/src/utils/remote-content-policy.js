@@ -218,3 +218,31 @@ export function blockRemoteContent(html) {
 
     return { html: sanitised, blocked: blockedCount };
 }
+
+let mailPurifier = null;
+
+/**
+ * 只去掉能执行脚本的内容（<script>、事件处理器、javascript: 链接等），保留远程图片等外部资源。
+ * 用户点「显示远程图片」或开启「自动加载远程图片」时用它，邮件原文绝不能不经净化就放进页面：
+ * 页面和邮件同源，邮件里的脚本能读到本地保存的登录令牌和管理员密码。
+ * 标签黑名单、<style> 处理和 URL 规则与 blockRemoteContent 一致，只是不拦远程地址。
+ *
+ * @param {string} html
+ * @returns {string}
+ */
+export function sanitizeMailHtml(html) {
+    if (!html || typeof html !== 'string') {
+        return '';
+    }
+    // 独立实例：不带 blockRemoteContent 的钩子，也不影响共享的 DOMPurify 单例
+    if (!mailPurifier) {
+        mailPurifier = DOMPurify(window);
+    }
+    return mailPurifier.sanitize(html, {
+        FORBID_TAGS: FORBIDDEN,
+        ADD_TAGS: ['style'],
+        FORCE_BODY: true,
+        ALLOWED_URI_REGEXP,
+        ALLOW_DATA_ATTR: true,
+    });
+}
