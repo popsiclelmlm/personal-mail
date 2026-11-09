@@ -61,6 +61,10 @@ Built on [cloudflare_temp_email](https://github.com/dreamhunter2333/cloudflare_t
 - Attachments a browser could run (HTML, SVG and the like) are download-only
 - Optional Turnstile on password reset, sign-up, anonymous mailbox creation and all logins; reserved address names (admin, noreply, ...); pages are kept out of search engines
 
+### Security issues that also affect upstream
+
+While building this project we found and fixed several frontend security issues that also affect upstream, mostly in how mail content is rendered. Upstream has no private reporting channel yet, so we asked the maintainer for one in [#1203](https://github.com/dreamhunter2333/cloudflare_temp_email/issues/1203) and will report privately once it is available. To avoid exposing sites that still run the upstream version, details will be added here after upstream releases a fix. To report a problem in this project, see [SECURITY.md](SECURITY.md).
+
 ### Experience
 
 - Default "Magpiess Mail" branding (magpie logo, blue theme) and a simpler navigation: Mailbox / Temp mail / User center
