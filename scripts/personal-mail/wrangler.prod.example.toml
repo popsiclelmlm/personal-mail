@@ -1,0 +1,84 @@
+# 生产配置模板：复制成 worker/wrangler.toml（已被 gitignore），把所有 <...> 换成自己的值。
+# 部署步骤见 docs/personal-mail/DEPLOY.md。
+# 敏感值（JWT_SECRET、ADMIN_PASSWORDS、Turnstile Secret、Resend API Key）一律用 wrangler secret put 设置，不要写在这里。
+name = "<worker-name>"
+main = "src/worker.ts"
+compatibility_date = "2025-04-01"
+compatibility_flags = [ "nodejs_compat" ]
+# 保留在 Cloudflare 后台改过的变量
+keep_vars = true
+# 关闭 workers.dev 地址，只通过自定义域名访问
+workers_dev = false
+routes = [
+  { pattern = "mail.<personal-domain>", custom_domain = true },
+]
+
+# Worker 同时托管前端：网页和接口同域名，部署前先在 frontend 目录执行 pnpm build
+[assets]
+directory = "../frontend/dist/"
+binding = "ASSETS"
+run_worker_first = true
+
+# 定时清理（清理规则在管理后台设置，个人邮箱永不清理）
+[triggers]
+crons = [ "0 */6 * * *" ]
+
+[vars]
+DEFAULT_LANG = "zh"
+# 页脚版权署名
+COPYRIGHT = "<site-name>"
+PREFIX = ""
+# 全部收信域名：临时邮箱域名 + 个人邮箱域名（每个域名都要在 Email Routing 里把全收规则交给这个 Worker）
+DOMAINS = ["<temp-domain-1>", "<temp-domain-2>", "<personal-domain>"]
+# 匿名用户和没有角色的登录用户可用的临时邮箱域名
+DEFAULT_DOMAINS = ["<temp-domain-1>", "<temp-domain-2>"]
+# 个人邮箱专用域名：不出现在临时邮箱里，只能在「邮箱」页由登录用户直接创建为个人邮箱
+PERSONAL_MAIL_DOMAINS = ["<personal-domain>"]
+USER_ROLES = [
+  { domains = ["<temp-domain-1>", "<temp-domain-2>", "<personal-domain>"], role = "member", prefix = "", max_permanent_address_count = 3 },
+  { domains = ["<temp-domain-1>", "<temp-domain-2>", "<personal-domain>"], role = "admin", prefix = "", max_permanent_address_count = 20 },
+]
+USER_DEFAULT_ROLE = "member"
+ADMIN_USER_ROLE = "admin"
+# 凭邀请码注册（邀请码在管理后台生成）
+REGISTER_MODE = "invite"
+# 注册时直接用「名字@个人邮箱域名」当账号，并自动建好这个个人邮箱
+REGISTER_WITH_PERSONAL_MAILBOX = true
+# 匿名用户可以建临时邮箱（受 RATE_LIMITER 和 IP_DOMAIN_CREATE_LIMIT 限制）
+DISABLE_ANONYMOUS_USER_CREATE_EMAIL = false
+ENABLE_USER_CREATE_EMAIL = true
+ENABLE_USER_DELETE_EMAIL = true
+ENABLE_MAIL_READ_STATUS = true
+# 默认发信余额为 0：用户要发信需管理员在后台批准
+DEFAULT_SEND_BALANCE = 0
+IP_DOMAIN_CREATE_LIMIT = 5
+# Workers 免费版每次请求只有 10ms CPU，密码哈希的迭代次数要调低
+PASSWORD_PBKDF2_ITERATIONS = 30000
+# 保留地址名（管理员在后台建地址不受限制）。名字校验前已去掉 a-z0-9 以外的字符。
+# 第一组按「包含」拦截：冒充官方风险高的词，把品牌名也加进去；noreply 是找回密码验证码的发件地址
+# 第二组按「完全相同」拦截：通用保留名，避免误伤正常名字；privacy 是隐私政策里的联系地址
+ADDRESS_CHECK_REGEX = "^(?!.*(admin|postmaster|hostmaster|webmaster|abuse|noreply|<brand>))(?!(root|info|support|security|help|service|contact|mailerdaemon|system|official|billing|sales|privacy)$).*$"
+# 管理员联系方式：隐私政策「联系我们」等处显示，这个地址由管理员在后台预留
+ADMIN_CONTACT = "privacy@<personal-domain>"
+# Turnstile 人机验证（托管模式）。Site Key 是公开的；Secret 用 wrangler secret put CF_TURNSTILE_SECRET_KEY 设置
+CF_TURNSTILE_SITE_KEY = "<turnstile-site-key>"
+# 登录（用户、邮箱地址、管理后台）也要过人机验证
+ENABLE_GLOBAL_TURNSTILE_CHECK = true
+
+[[d1_databases]]
+binding = "DB"
+database_name = "<d1-name>"
+# npx wrangler d1 create <d1-name> 输出的 database_id
+database_id = "<d1-database-id>"
+
+[[kv_namespaces]]
+binding = "KV"
+# npx wrangler kv namespace create <kv-name> 输出的 id
+id = "<kv-namespace-id>"
+
+# 按 IP 限流：创建地址、登录、注册、重设密码等接口
+[[unsafe.bindings]]
+name = "RATE_LIMITER"
+type = "ratelimit"
+namespace_id = "2001"
+simple = { limit = 10, period = 60 }

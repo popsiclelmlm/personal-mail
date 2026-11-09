@@ -2,6 +2,8 @@
 
 本仓库在上游 [cloudflare_temp_email](https://github.com/dreamhunter2333/cloudflare_temp_email) 之上做了个人邮件系统改造，方案见 `docs/plans/2026-11-08-personal-mail-system.md`。这里只记录和上游不同的部署事项；上游已有的配置照上游文档。
 
+从零部署的完整步骤（包括让 AI 编程助手代为部署的做法）见 [DEPLOY.md](DEPLOY.md)。
+
 ## 新增或改变的环境变量
 
 | 变量 | 说明 | 默认 |
@@ -95,7 +97,7 @@ Workers 免费版不能用 Cloudflare 的 `send_email` 向任意地址发信（�
 
 1. 在 Resend 添加个人邮箱域名，按提示加 DNS 记录（都在 `send` 子域名和 DKIM 记录上，不影响根域名的 Email Routing 收信）；建议另加 `_dmarc` TXT `v=DMARC1; p=none;`。
 2. 建一个只有 Sending access、只限这个域名的 API Key，用 `wrangler secret put RESEND_TOKEN_<域名大写，点换成下划线>` 保存。用按域名区分的密钥而不是全局 `RESEND_TOKEN`，临时邮箱域名就不会走 Resend。
-3. 管理后台「用户设置」开启邮件验证，发件地址填 `noreply@个人邮箱域名`；再把这个地址加进「无限制发送地址列表」（找回密码的发信会检查发件地址的余额，`DEFAULT_SEND_BALANCE = 0` 时不加会报余额不足）。
+3. 管理后台「用户设置」开启邮件验证，发件地址填 `noreply@个人邮箱域名`；再把这个地址加进「快速设置 → 全局邮箱设置」的「无余额限制发送地址列表」（找回密码的发信会检查发件地址的余额，`DEFAULT_SEND_BALANCE = 0` 时不加会报余额不足）。
 4. `ADDRESS_CHECK_REGEX` 里要包含 `noreply`，否则用户注册了这个名字就能无限发信。
 
 一次找回密码大约发 3 封：验证码 1 封，重设成功后给账号邮箱和辅助邮箱各发 1 封通知。站内发信额度或 Resend 额度用完、发得太快时，找回密码、注册验证码和用户发信接口返回 429 和「今天的发信额度已用完，请明天再试」这类提示，验证码不会被存下。
@@ -143,8 +145,8 @@ Workers 免费版不能用 Cloudflare 的 `send_email` 向任意地址发信（�
 本机没有 Docker 时，用 `wrangler dev` 起本地 Worker，再用脚本调接口：
 
 ```bash
-cp scripts/personal-mail/wrangler.local.toml worker/wrangler.toml
-cd worker && pnpm exec wrangler dev --port 8797 --test-scheduled
+cp scripts/personal-mail/wrangler.local.toml worker/wrangler.dev.toml
+cd worker && pnpm exec wrangler dev -c wrangler.dev.toml --port 8797 --test-scheduled
 node scripts/personal-mail/local-verify.mjs all
 ```
 
