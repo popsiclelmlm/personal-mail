@@ -121,6 +121,8 @@ export const useGlobalState = createGlobalState(
         const userSettings = ref({
             /** @type {boolean} */
             fetched: false,
+            /** 最近一次用登录令牌获取用户信息是否失败（令牌失效、账号不存在或网络异常） @type {boolean} */
+            fetch_failed: false,
             /** @type {string} */
             user_email: '',
             /** @type {number} */

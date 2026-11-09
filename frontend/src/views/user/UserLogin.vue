@@ -12,12 +12,21 @@ import { startAuthentication } from '@simplewebauthn/browser';
 import Turnstile from '../../components/Turnstile.vue';
 
 const {
-    userJwt, userOpenSettings, openSettings,
+    userJwt, userSettings, userOpenSettings, openSettings,
     userOauth2SessionState, userOauth2SessionClientID
 } = useGlobalState()
 const message = useMessage();
 
 const { t } = useScopedI18n('views.user.UserLogin')
+
+// 登录成功：先切回加载骨架屏，再写入令牌并刷新页面，
+// 避免刷新前的一瞬间还停在登录表单上、闪出「登录信息已过期」
+const finishLogin = (jwt) => {
+    userSettings.value.fetched = false;
+    userSettings.value.fetch_failed = false;
+    userJwt.value = jwt;
+    location.reload();
+}
 
 const tabValue = ref("signin");
 const showModal = ref(false);
@@ -73,8 +82,7 @@ const emailLogin = async () => {
                 cf_token: loginCfToken.value
             })
         });
-        userJwt.value = res.jwt;
-        location.reload();
+        finishLogin(res.jwt);
     } catch (error) {
         message.error(error.message || "login failed");
         loginTurnstileRef.value?.refresh?.();
@@ -250,8 +258,7 @@ const passkeyLogin = async () => {
                 credential
             })
         })
-        userJwt.value = res.jwt;
-        location.reload();
+        finishLogin(res.jwt);
     } catch (e) {
         console.error(e)
         message.error(e.message)

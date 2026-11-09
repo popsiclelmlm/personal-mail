@@ -7,7 +7,7 @@ import { useGlobalState } from '../../store'
 import { api } from '../../api';
 
 const {
-    userJwt, userOauth2SessionState, userOauth2SessionClientID
+    userJwt, userSettings, userOauth2SessionState, userOauth2SessionClientID
 } = useGlobalState()
 
 const message = useMessage();
@@ -37,6 +37,9 @@ onMounted(async () => {
                 clientID: userOauth2SessionClientID.value
             })
         });
+        // 先显示加载状态，等用新令牌查到账号再展示，避免闪出登录表单和过期提示
+        userSettings.value.fetched = false;
+        userSettings.value.fetch_failed = false;
         userJwt.value = res.jwt;
         router.push('/user');
     } catch (error) {

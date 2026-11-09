@@ -188,6 +188,7 @@ const getUserSettings = async (message) => {
         if (!showUserSystem.value || !userJwt.value) return;
         const res = await api.fetch("/user_api/settings")
         Object.assign(userSettings.value, res)
+        userSettings.value.fetch_failed = false;
         // auto refresh user jwt
         if (userSettings.value.new_user_token) {
             try {
@@ -202,6 +203,7 @@ const getUserSettings = async (message) => {
             }
         }
     } catch (error) {
+        userSettings.value.fetch_failed = true;
         message?.error(error.message || "error");
     } finally {
         userSettings.value.fetched = true;

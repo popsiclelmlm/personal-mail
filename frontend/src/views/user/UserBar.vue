@@ -38,7 +38,7 @@ onMounted(async () => {
         </div>
         <div v-else class="center">
             <n-card :bordered="false" embedded style="max-width: 600px;">
-                <n-alert v-if="userJwt" type="warning" :show-icon="false" :bordered="false" closable>
+                <n-alert v-if="userJwt && userSettings.fetch_failed" type="warning" :show-icon="false" :bordered="false" closable>
                     <span>{{ t('fetchUserSettingsError') }}</span>
                 </n-alert>
                 <UserLogin />
