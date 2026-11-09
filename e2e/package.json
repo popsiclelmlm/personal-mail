@@ -1,5 +1,5 @@
 {
-  "name": "cloudflare-temp-email-e2e",
+  "name": "personal-mail-e2e",
   "private": true,
   "type": "module",
   "scripts": {

@@ -130,5 +130,7 @@ dist
 .pnp.*
 
 .wrangler
+# 生产配置和本地验证配置都只放本机（模板见 scripts/personal-mail/）
 wrangler.toml
+wrangler.dev.toml
 .dev.vars

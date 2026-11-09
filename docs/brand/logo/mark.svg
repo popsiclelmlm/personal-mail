@@ -1,5 +1,5 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64">
-  <!-- Free Temp Mail 标志：屋形信封。单色，主色 teal-500；需要随主题变色时把 stroke 改成 currentColor -->
+  <!-- Personal Mail 标志：屋形信封。单色，主色 teal-500；需要随主题变色时把 stroke 改成 currentColor -->
   <g fill="none" stroke="#0F8294" stroke-width="4.5" stroke-linecap="round" stroke-linejoin="round">
     <path d="M10 27 L32 11 L54 27 V48 a4 4 0 0 1 -4 4 H14 a4 4 0 0 1 -4 -4 Z"/>
     <path d="M10 27 L32 42 L54 27"/>

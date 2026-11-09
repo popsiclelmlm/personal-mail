@@ -1,6 +1,6 @@
-# Free Temp Mail：部署与配置说明
+# Personal Mail：部署与配置说明
 
-本仓库在上游 [cloudflare_temp_email](https://github.com/dreamhunter2333/cloudflare_temp_email) 之上做了个人邮件系统改造，方案见 `docs/plans/2026-11-08-personal-mail-system.md`。这里只记录和上游不同的部署事项；上游已有的配置照上游文档。
+本仓库在上游 [cloudflare_temp_email](https://github.com/dreamhunter2333/cloudflare_temp_email) 之上做了个人邮件系统改造。这里只记录和上游不同的部署事项；上游已有的配置照上游文档。
 
 从零部署的完整步骤（包括让 AI 编程助手代为部署的做法）见 [DEPLOY.md](DEPLOY.md)。
 

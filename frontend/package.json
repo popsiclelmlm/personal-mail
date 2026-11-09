@@ -1,5 +1,5 @@
 {
-  "name": "cloudflare_temp_email",
+  "name": "personal-mail-frontend",
   "version": "1.14.0",
   "private": true,
   "type": "module",
