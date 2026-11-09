@@ -42,6 +42,8 @@ type Bindings = {
     MAX_ADDRESS_LEN: string | number | undefined
     DEFAULT_DOMAINS: string | string[] | undefined
     DOMAINS: string | string[] | undefined
+    // 个人邮箱专用域名：不出现在临时邮箱里，只能由登录用户直接创建为个人邮箱
+    PERSONAL_MAIL_DOMAINS: string | string[] | undefined
     ENABLE_CREATE_ADDRESS_SUBDOMAIN_MATCH: string | boolean | undefined
     RANDOM_SUBDOMAIN_DOMAINS: string | string[] | undefined
     RANDOM_SUBDOMAIN_LENGTH: string | number | undefined

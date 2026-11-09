@@ -22,6 +22,7 @@ api.patch('/user_api/mails/:id/read', personal_mailbox.updateMailReadStatus);
 api.delete('/user_api/mails/:id', user_mail_api.deleteMail);
 
 // personal mailbox api
+api.post('/user_api/personal_mailbox', personal_mailbox.createPersonalMailbox);
 api.post('/user_api/address/:address_id/reset_credential', personal_mailbox.resetCredential);
 api.post('/user_api/address/:address_id/credential_login', personal_mailbox.setCredentialLogin);
 api.get('/user_api/delete_account/preview', personal_mailbox.deleteAccountPreview);

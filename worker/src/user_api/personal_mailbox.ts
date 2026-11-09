@@ -1,10 +1,11 @@
 import { Context } from 'hono';
 
 import i18n from '../i18n';
-import { getBooleanValue } from '../utils';
+import { getBooleanValue, getPersonalMailDomains, isAddressCountLimitReached } from '../utils';
+import { commonGetUserRole, newAddress } from '../common';
 import { signAddressJwt } from '../address_credential';
 import { unbindTelegramByAddress } from '../telegram_api/common';
-import { getBindedAddressById, transferAddressToUser } from './bind_address';
+import { getBindedAddressById, grantPersonalSendBalance, transferAddressToUser } from './bind_address';
 import { authGuardKey, clearAuthFailures, isAuthLocked, recordAuthFailure } from './auth_guard';
 import { resolvePbkdf2Iterations, verifyUserPassword } from './password';
 
@@ -230,7 +231,69 @@ const deleteAccount = async (c: Context<HonoCustomType>) => {
     return c.json({ success: true });
 };
 
+/**
+ * 直接创建个人邮箱：只能用个人邮箱专用域名（PERSONAL_MAIL_DOMAINS），
+ * 建好后绑定到当前账号、设为永久并关闭邮箱凭证登录，占用角色的永久邮箱额度。
+ */
+const createPersonalMailbox = async (c: Context<HonoCustomType>) => {
+    const msgs = i18n.getMessagesbyContext(c);
+    const { user_id } = c.get('userPayload');
+    if (getPersonalMailDomains(c).length === 0) {
+        return c.text(msgs.PersonalMailDomainNotConfiguredMsg, 400);
+    }
+    const body = await c.req.json().catch(() => ({})) as { name?: unknown, domain?: unknown };
+    const name = typeof body.name === 'string' ? body.name : '';
+    const domain = typeof body.domain === 'string' && body.domain ? body.domain : null;
+    if (!name.trim()) return c.text(msgs.RequiredFieldMsg, 400);
+
+    const userRole = await commonGetUserRole(c, user_id);
+    if (await isAddressCountLimitReached(c, user_id, userRole?.role)) {
+        return c.text(msgs.MaxAddressCountReachedMsg, 400);
+    }
+    const maxPermanent = userRole?.max_permanent_address_count ?? 0;
+    const { count } = await c.env.DB.prepare(
+        `SELECT COUNT(*) AS count FROM address a JOIN users_address ua ON ua.address_id = a.id`
+        + ` WHERE ua.user_id = ? AND a.is_permanent = 1`
+    ).bind(user_id).first<{ count: number }>() || { count: 0 };
+    if (maxPermanent <= 0 || count >= maxPermanent) {
+        return c.text(msgs.PermanentQuotaExceededMsg, 400);
+    }
+
+    let created: { address: string, address_id: number };
+    try {
+        created = await newAddress(c, {
+            name, domain,
+            enablePrefix: false,
+            addressPrefix: '',
+            checkLengthByConfig: true,
+            personalMailbox: true,
+            sourceMeta: c.req.header('CF-Connecting-IP') || `user:${user_id}`,
+        });
+    } catch (e) {
+        return c.text(`${msgs.FailedCreateAddressMsg}: ${(e as Error).message}`, 400);
+    }
+    // 设为永久并绑定到账号；失败时删掉刚建的地址，避免留下无主地址
+    try {
+        await c.env.DB.batch([
+            c.env.DB.prepare(
+                `UPDATE address SET retention_type = 'permanent', is_permanent = 1, retention_until = NULL,`
+                + ` credential_login_disabled = 1, updated_at = datetime('now') WHERE id = ?`
+            ).bind(created.address_id),
+            c.env.DB.prepare(
+                `INSERT INTO users_address (user_id, address_id) VALUES (?, ?)`
+            ).bind(user_id, created.address_id),
+        ]);
+    } catch (e) {
+        console.error('Failed to bind personal mailbox', e);
+        await c.env.DB.prepare(`DELETE FROM address WHERE id = ?`).bind(created.address_id).run();
+        return c.text(msgs.OperationFailedMsg, 500);
+    }
+    await grantPersonalSendBalance(c, user_id, created.address);
+    return c.json({ success: true, address: created.address, address_id: created.address_id });
+};
+
 export default {
+    createPersonalMailbox,
     resetCredential,
     setCredentialLogin,
     unreadCounts,

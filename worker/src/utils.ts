@@ -244,6 +244,16 @@ export const getDomains = (c: Context<HonoCustomType>): string[] => {
     return normalizeDomains(c.env.DOMAINS);
 }
 
+/** 个人邮箱专用域名（PERSONAL_MAIL_DOMAINS），只取 DOMAINS 里配置过的 */
+export const getPersonalMailDomains = (c: Context<HonoCustomType>): string[] => {
+    if (!c.env.PERSONAL_MAIL_DOMAINS) {
+        return [];
+    }
+    const domains = getDomains(c);
+    return normalizeDomains(getStringArray(c.env.PERSONAL_MAIL_DOMAINS))
+        .filter((domain) => domains.includes(domain));
+}
+
 export const getRandomSubdomainDomains = (c: Context<HonoCustomType>): string[] => {
     if (!c.env.RANDOM_SUBDOMAIN_DOMAINS) {
         return [];
@@ -490,6 +500,7 @@ export default {
     getDomainMapValue,
     getDefaultDomains,
     getDomains,
+    getPersonalMailDomains,
     getRandomSubdomainDomains,
     getUserRoles,
     getAnotherWorkerList,

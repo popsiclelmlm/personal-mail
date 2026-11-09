@@ -1,8 +1,20 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64">
-  <!-- 16–32px 用的应用图标：标志放大、线条加粗，保证小尺寸清晰 -->
-  <rect width="64" height="64" rx="14" fill="#0F8294"/>
-  <g transform="translate(5 5) scale(0.84375)" fill="none" stroke="#FFFFFF" stroke-width="6.5" stroke-linecap="round" stroke-linejoin="round">
-    <path d="M10 27 L32 11 L54 27 V48 a4 4 0 0 1 -4 4 H14 a4 4 0 0 1 -4 -4 Z"/>
-    <path d="M10 27 L32 42 L54 27"/>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
+  <title>Magpiess Mail</title>
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#2563eb"/>
+      <stop offset="1" stop-color="#0e7490"/>
+    </linearGradient>
+  </defs>
+  <rect width="64" height="64" rx="15" fill="url(#bg)"/>
+  <g transform="translate(-0.5 -2)">
+    <path d="M17 38 L3.5 50.5 Q3 53.5 6 54 L20 44.5 Z" fill="#0b1220"/>
+    <path d="M15 42 L6.5 50" stroke="#38bdf8" stroke-width="1.8" stroke-linecap="round"/>
+    <rect x="14" y="28" width="33" height="22" rx="4" fill="#ffffff"/>
+    <path d="M14 32 Q14 28 18 28 L43 28 Q47 28 47 32 L30.5 42 Z" fill="#0b1220"/>
+    <path d="M20 31.2 L30.5 37.6 L37.5 33.4" fill="none" stroke="#38bdf8" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/>
+    <path d="M39 30 Q38 15.5 47 15 Q55 15 55 22.5 Q55 27 50 30 Z" fill="#0b1220"/>
+    <path d="M54 19.5 L61.5 22 L54 24 Z" fill="#0b1220"/>
+    <circle cx="49.6" cy="20.6" r="1.6" fill="#ffffff"/>
   </g>
 </svg>

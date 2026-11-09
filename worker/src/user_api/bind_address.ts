@@ -1,12 +1,13 @@
 import { Context } from 'hono';
 import { Jwt } from 'hono/utils/jwt'
 
-import { isAddressCountLimitReached } from "../utils"
+import { getPersonalMailDomains, isAddressCountLimitReached } from "../utils"
 import { unbindTelegramByAddress } from '../telegram_api/common';
 import i18n from '../i18n';
 import { updateAddressUpdatedAt, commonGetUserRole, handleListQuery, hideObjectFields } from '../common';
 import { isRetentionType } from '../retention';
 import { signAddressJwt } from '../address_credential';
+import { isPersonalMailAddress } from '../personal_domains';
 
 export const getBindedAddressById = async (
     c: Context<HonoCustomType>,
@@ -28,7 +29,7 @@ export const getBindedAddressById = async (
  * 个人邮箱默认可以发信：按角色配置的 personal_send_balance 初始化发信额度。
  * 已有发信记录时只把额度补到不低于角色配置，并重新启用。
  */
-const grantPersonalSendBalance = async (
+export const grantPersonalSendBalance = async (
     c: Context<HonoCustomType>,
     user_id: number | string,
     address: string,
@@ -345,6 +346,10 @@ const UserBindAddressModule = {
         const address = await getBindedAddressById(c, user_id, address_id);
         if (!address) {
             return c.text(msgs.AddressNotBindedMsg, 400);
+        }
+        // 个人邮箱专用域名下的地址只能是永久邮箱，改回临时会被自动清理
+        if (retention_type !== 'permanent' && isPersonalMailAddress(address, getPersonalMailDomains(c))) {
+            return c.text(msgs.PersonalMailDomainPermanentOnlyMsg, 400);
         }
         if (retention_type === 'permanent') {
             const isPermanent = await c.env.DB.prepare(

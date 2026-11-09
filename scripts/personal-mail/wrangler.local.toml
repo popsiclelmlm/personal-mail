@@ -1,4 +1,5 @@
-# 本地验证用配置：复制成 worker/wrangler.toml（已被 gitignore）后运行 wrangler dev，不要用于部署
+# 本地验证用配置：复制成 worker/wrangler.dev.toml 后用 wrangler dev -c wrangler.dev.toml 运行，不要用于部署
+# （worker/wrangler.toml 留给生产配置）
 name = "cloudflare_temp_email"
 main = "../e2e/fixtures/worker.ts"
 compatibility_date = "2025-04-01"
@@ -7,13 +8,15 @@ keep_vars = true
 
 [vars]
 PREFIX = ""
-DOMAINS = ["personal.test", "temp.test"]
+DOMAINS = ["personal.test", "temp.test", "me.test"]
+# 个人邮箱专用域名：临时邮箱里不显示，只能在「邮箱」页直接创建为个人邮箱
+PERSONAL_MAIL_DOMAINS = ["me.test"]
 DEFAULT_DOMAINS = ["temp.test"]
 RANDOM_SUBDOMAIN_DOMAINS = ["temp.test"]
 CREATE_ADDRESS_DEFAULT_DOMAIN_FIRST = true
 USER_ROLES = [
-  { domains = ["personal.test", "temp.test"], role = "member", prefix = "", max_permanent_address_count = 2, personal_send_balance = 5 },
-  { domains = ["personal.test", "temp.test"], role = "admin", prefix = "", max_permanent_address_count = 10 },
+  { domains = ["personal.test", "temp.test", "me.test"], role = "member", prefix = "", max_permanent_address_count = 2, personal_send_balance = 5 },
+  { domains = ["personal.test", "temp.test", "me.test"], role = "admin", prefix = "", max_permanent_address_count = 10 },
 ]
 USER_DEFAULT_ROLE = "member"
 ADMIN_USER_ROLE = "admin"

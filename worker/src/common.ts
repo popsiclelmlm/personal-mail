@@ -2,7 +2,8 @@ import { Context } from 'hono';
 import { Jwt } from 'hono/utils/jwt'
 import { WorkerMailerOptions } from 'worker-mailer';
 
-import { getBooleanValue, getDomains, getStringArray, getStringValue, getIntValue, getUserRoles, getDefaultDomains, getJsonSetting, getAnotherWorkerList, hashPassword, getJsonObjectValue, getRandomSubdomainDomains, getDomainMapValue, isDomainOrSubdomain, normalizeDomains, trimLower } from './utils';
+import { getBooleanValue, getDomains, getPersonalMailDomains, getStringArray, getStringValue, getIntValue, getUserRoles, getDefaultDomains, getJsonSetting, getAnotherWorkerList, hashPassword, getJsonObjectValue, getRandomSubdomainDomains, getDomainMapValue, isDomainOrSubdomain, normalizeDomains, trimLower } from './utils';
+import { selectCreatableDomains } from './personal_domains';
 import { unbindTelegramByAddress } from './telegram_api/common';
 import { CONSTANTS } from './constants';
 import { AddressCreationSettings, AdminWebhookSettings, ExtractResult, WebhookMail, WebhookSettings } from './models';
@@ -363,6 +364,7 @@ export const newAddress = async (
         enableCheckNameRegex = true,
         sourceMeta = null,
         beforeInsert = null,
+        personalMailbox = false,
     }: {
         name: string, domain: string | undefined | null,
         enablePrefix: boolean,
@@ -374,6 +376,8 @@ export const newAddress = async (
         sourceMeta?: string | undefined | null,
         // 域名解析完成之后、写库之前调用，抛出的错误原样向上传递
         beforeInsert?: ((target: { domain: string, baseDomain: string }) => Promise<void>) | null,
+        // true：只能用个人邮箱专用域名（PERSONAL_MAIL_DOMAINS）；false：临时邮箱，排除这些域名
+        personalMailbox?: boolean,
     }
 ): Promise<{ address: string, jwt: string, password?: string | null, address_id: number }> => {
     const msgs = i18n.getMessagesbyContext(c);
@@ -408,7 +412,10 @@ export const newAddress = async (
         name = trimLower(c.env.PREFIX) + name;
     }
     // check domain
-    const allowDomains = checkAllowDomains ? await getAllowDomains(c) : getDomains(c);
+    // 管理员建地址（checkAllowDomains = false）不受个人邮箱专用域名限制
+    const allowDomains = checkAllowDomains
+        ? selectCreatableDomains(await getAllowDomains(c), getPersonalMailDomains(c), personalMailbox)
+        : getDomains(c);
     // if domain is not set, select domain based on environment configuration
     if (!domain && allowDomains.length > 0) {
         const createAddressDefaultDomainFirst = getBooleanValue(c.env.CREATE_ADDRESS_DEFAULT_DOMAIN_FIRST);

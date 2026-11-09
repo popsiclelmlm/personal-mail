@@ -98,10 +98,10 @@ export default {
         // send code to email
         try {
             await sendMail(c, settings.verifyMailSender, {
-                from_name: "Free Temp Mail",
+                from_name: "Magpiess Mail",
                 to_name: '',
                 to_mail: email as string,
-                subject: "Free Temp Mail verification code",
+                subject: "Magpiess Mail verification code",
                 content: `Your verify code is ${code}`,
                 is_html: false,
             })
@@ -306,7 +306,7 @@ export default {
         c.executionCtx.waitUntil((async () => {
             try {
                 await sendMail(c, settings.verifyMailSender as string, {
-                    from_name: "Free Temp Mail",
+                    from_name: "Magpiess Mail",
                     to_name: '',
                     to_mail: user.user_email,
                     subject: msgs.PasswordResetMailSubjectMsg,

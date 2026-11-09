@@ -192,6 +192,8 @@ export type LocaleMessages = {
     IpDomainMaxAddressCountReachedMsg: string
     InvalidRetentionTypeMsg: string
     PermanentQuotaExceededMsg: string
+    PersonalMailDomainNotConfiguredMsg: string
+    PersonalMailDomainPermanentOnlyMsg: string
     InviteCodeRequiredMsg: string
     InviteCodeInvalidMsg: string
     TooManyAttemptsMsg: string

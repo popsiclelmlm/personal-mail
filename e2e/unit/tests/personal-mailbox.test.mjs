@@ -4,6 +4,7 @@ import { test } from 'node:test';
 import { createD1 } from '../d1-sqlite.mjs';
 import { decideAddressCredential } from '../../../worker/src/auth_version.ts';
 import { buildAddressCleanupCondition, buildBatchDeleteAddressStatements } from '../../../worker/src/retention.ts';
+import { isPersonalMailAddress, isPersonalMailDomain, selectCreatableDomains } from '../../../worker/src/personal_domains.ts';
 
 const decide = (overrides) => decideAddressCredential({
     tokenVersion: 0,
@@ -57,4 +58,24 @@ test('personal mailboxes are never cleaned up, whatever the cleanup type', async
     }
     assert.equal(db.raw.prepare(`SELECT COUNT(*) AS n FROM address`).get().n, 1);
     assert.equal(db.raw.prepare(`SELECT COUNT(*) AS n FROM raw_mails`).get().n, 1);
+});
+
+test('personal-only domains are hidden from temp mail and are the only choice for personal mailboxes', () => {
+    const allow = ['magpiess.com', 'temp-a.test', 'temp-b.test'];
+    const personal = ['magpiess.com'];
+    assert.deepEqual(selectCreatableDomains(allow, personal, false), ['temp-a.test', 'temp-b.test']);
+    assert.deepEqual(selectCreatableDomains(allow, personal, true), ['magpiess.com']);
+    // 没配置个人邮箱域名时不改变临时邮箱的域名，也不能建个人邮箱
+    assert.deepEqual(selectCreatableDomains(allow, [], false), allow);
+    assert.deepEqual(selectCreatableDomains(allow, [], true), []);
+});
+
+test('personal-only domain matching covers subdomains and addresses, case-insensitively', () => {
+    const personal = ['magpiess.com'];
+    assert.equal(isPersonalMailDomain('MAGPIESS.com', personal), true);
+    assert.equal(isPersonalMailDomain('x.magpiess.com', personal), true);
+    assert.equal(isPersonalMailDomain('notmagpiess.com', personal), false);
+    assert.equal(isPersonalMailAddress('Me@Magpiess.com', personal), true);
+    assert.equal(isPersonalMailAddress('me@temp-a.test', personal), false);
+    assert.equal(isPersonalMailAddress('no-at-sign', personal), false);
 });

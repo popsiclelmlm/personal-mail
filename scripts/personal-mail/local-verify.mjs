@@ -3,9 +3,10 @@
 // 用法：
 //   1. cp scripts/personal-mail/wrangler.local.toml worker/wrangler.toml
 //   2. cd worker && pnpm exec wrangler dev --port 8797 --test-scheduled
-//   3. node scripts/personal-mail/local-verify.mjs [phase1|phase2|phase3|all]
+//   3. node scripts/personal-mail/local-verify.mjs [phase1|phase2|phase3|phase4|all]
 // 每次运行都用新的随机名字，可以对同一个本地数据库重复执行。
 import { execFileSync } from 'node:child_process';
+import { existsSync } from 'node:fs';
 import { createHash, createHmac, randomBytes } from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 
@@ -200,8 +201,11 @@ const phase1 = async () => {
 // 直接查本地 D1（需要 VERIFY_D1_PERSIST）；没配置时返回 null，相关检查跳过
 const sql = (query) => {
     if (!D1_PERSIST) return null;
+    // worker/wrangler.toml 是生产配置，本地库用 wrangler.dev.toml 里的 database_id
+    const configArgs = existsSync(new URL('../../worker/wrangler.dev.toml', import.meta.url))
+        ? ['-c', 'wrangler.dev.toml'] : [];
     const output = execFileSync('pnpm', [
-        'exec', 'wrangler', 'd1', 'execute', 'DB', '--local', '--persist-to', D1_PERSIST, '--json', '--command', query,
+        'exec', 'wrangler', 'd1', 'execute', 'DB', ...configArgs, '--local', '--persist-to', D1_PERSIST, '--json', '--command', query,
     ], { cwd: WORKER_DIR, encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] });
     return JSON.parse(output)[0].results;
 };
@@ -571,7 +575,70 @@ const phase3 = async () => {
     check('mail of the transferred mailbox moves with it', otherMails.data.results.length === 2, otherMails.data.results.length);
 };
 
-const phases = { phase1, phase2, phase3 };
+const phase4 = async () => {
+    console.log('phase 4: personal-only domains (PERSONAL_MAIL_DOMAINS = me.test)');
+    const settings = await call('GET', '/open_api/settings');
+    check('open settings list the personal-only domains', JSON.stringify(settings.data.personalMailDomains) === '["me.test"]',
+        settings.data.personalMailDomains);
+
+    // 临时邮箱（匿名和登录用户）都不能用个人邮箱专用域名
+    const anon = await createAddress(`pd${RUN_ID}`, 'me.test');
+    check('anonymous users cannot create a temp address on the personal-only domain', anon.status === 400, anon);
+    const email = `pdu${RUN_ID}@example.test`;
+    await adminCreateUser(email, 'pd-pw', 'member');
+    const token = (await login(email, 'pd-pw')).data.jwt;
+    const userTemp = await createAddress(`pd2${RUN_ID}`, 'me.test', { token });
+    check('logged-in users cannot create a temp address on the personal-only domain', userTemp.status === 400, userTemp);
+    const tempOk = await createAddress(`pd3${RUN_ID}`, 'temp.test');
+    check('temp addresses on other domains still work', tempOk.status === 200, tempOk);
+
+    // 直接创建个人邮箱
+    const noLogin = await call('POST', '/user_api/personal_mailbox', { body: { name: `pm4${RUN_ID}` } });
+    check('creating a personal mailbox needs an account', noLogin.status === 401, noLogin.status);
+    const wrongDomain = await call('POST', '/user_api/personal_mailbox', {
+        body: { name: `pm4${RUN_ID}`, domain: 'temp.test' }, headers: userHeaders(token),
+    });
+    check('personal mailboxes cannot use temp domains', wrongDomain.status === 400, wrongDomain);
+    const created = await call('POST', '/user_api/personal_mailbox', {
+        body: { name: `pm4${RUN_ID}` }, headers: userHeaders(token),
+    });
+    check('create a personal mailbox on the personal-only domain', created.status === 200
+        && created.data.address === `pm4${RUN_ID}@me.test`, created);
+    const row = (await call('GET', '/user_api/mails/unread_counts', { headers: userHeaders(token) }))
+        .data.results.find((item) => item.address_id === created.data.address_id);
+    check('the new personal mailbox is bound and permanent', row && row.is_permanent === 1, row);
+    const flags = sql(`SELECT retention_type, credential_login_disabled FROM address WHERE id = ${Number(created.data.address_id)}`);
+    if (flags) {
+        check('the new personal mailbox refuses plain credentials', flags[0]?.retention_type === 'permanent'
+            && flags[0]?.credential_login_disabled === 1, flags);
+    }
+    const downgrade = await call('POST', '/user_api/bind_address/retention', {
+        body: { address_id: created.data.address_id, retention_type: 'temporary' }, headers: userHeaders(token),
+    });
+    check('personal-only domain addresses cannot become temporary', downgrade.status === 400, downgrade);
+    const duplicate = await call('POST', '/user_api/personal_mailbox', {
+        body: { name: `pm4${RUN_ID}` }, headers: userHeaders(token),
+    });
+    check('duplicate personal mailbox names are refused', duplicate.status === 400, duplicate);
+
+    // 额度：member 角色 max_permanent_address_count = 2
+    const second = await call('POST', '/user_api/personal_mailbox', { body: { name: `pm5${RUN_ID}` }, headers: userHeaders(token) });
+    const third = await call('POST', '/user_api/personal_mailbox', { body: { name: `pm6${RUN_ID}` }, headers: userHeaders(token) });
+    check('the permanent mailbox quota applies', second.status === 200 && third.status === 400, [second.status, third.text]);
+
+    // 收信
+    await receiveMail(`pm4${RUN_ID}@me.test`, `hello ${RUN_ID}`);
+    const inbox = await call('GET', `/user_api/mails?limit=10&offset=0&address_id=${created.data.address_id}`, { headers: userHeaders(token) });
+    check('mail to the personal mailbox shows up in the unified inbox', inbox.data.results?.length === 1, inbox.data);
+
+    // 管理员不受限制
+    const adminCreate = await call('POST', '/admin/new_address', {
+        body: { name: `pa4${RUN_ID}`, domain: 'me.test', enablePrefix: false }, headers: admin,
+    });
+    check('admins can still create addresses on the personal-only domain', adminCreate.status === 200, adminCreate);
+};
+
+const phases = { phase1, phase2, phase3, phase4 };
 
 const main = async () => {
     const target = process.argv[2] || 'all';

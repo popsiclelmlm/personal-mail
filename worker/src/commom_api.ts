@@ -32,6 +32,7 @@ api.get('/open_api/settings', async (c) => {
         "maxAddressLen": utils.getIntValue(c.env.MAX_ADDRESS_LEN, 30),
         "defaultDomains": utils.getDefaultDomains(c),
         "domains": utils.getDomains(c),
+        "personalMailDomains": utils.getPersonalMailDomains(c),
         "randomSubdomainDomains": utils.getRandomSubdomainDomains(c),
         "domainLabels": utils.getStringArray(c.env.DOMAIN_LABELS),
         "needAuth": needAuth,

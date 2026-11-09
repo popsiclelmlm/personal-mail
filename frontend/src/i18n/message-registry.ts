@@ -694,14 +694,28 @@ export const MESSAGE_REGISTRY = {
       "en": "Status",
       "zh": "状态"
     },
+    "tempMailbox": {
+      "en": "Temp Mail",
+      "zh": "临时邮箱"
+    },
     "title": {
-      "en": "Free Temp Mail",
-      "zh": "Free Temp Mail"
+      "en": "Magpiess Mail",
+      "zh": "Magpiess Mail"
     },
     "userCenter": {
       "en": "User Center",
       "zh": "用户中心"
     }
+  },
+  "views.Mailbox": {
+    "personalMailboxes": { "en": "Personal mailboxes", "zh": "个人邮箱" },
+    "personalTip": { "en": "Permanent addresses that only your account can open. They are never cleaned up automatically.", "zh": "长期使用的地址，只能通过你的账号打开，不会被自动清理。" },
+    "create": { "en": "New personal mailbox", "zh": "新建个人邮箱" },
+    "confirmCreate": { "en": "Create", "zh": "创建" },
+    "namePlaceholder": { "en": "Mailbox name, e.g. me", "zh": "邮箱名，例如 me" },
+    "nameRequired": { "en": "Enter a name", "zh": "请输入名字" },
+    "created": { "en": "Created {address}", "zh": "已创建 {address}" },
+    "noPersonal": { "en": "No personal mailbox yet.", "zh": "还没有个人邮箱。" },
   },
   "views.user.BindAddress": {
     "logout": {

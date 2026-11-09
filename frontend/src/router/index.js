@@ -23,6 +23,11 @@ const router = createRouter({
             component: Index
         },
         {
+            path: '/mailbox',
+            alias: '/:lang/mailbox',
+            component: () => import('../views/Mailbox.vue')
+        },
+        {
             path: '/user',
             alias: '/:lang/user',
             component: User

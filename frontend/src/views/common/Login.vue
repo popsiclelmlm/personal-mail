@@ -9,7 +9,7 @@ import Turnstile from '../../components/Turnstile.vue'
 
 import { useGlobalState } from '../../store'
 import { api } from '../../api'
-import { getRouterPathWithLang, hashPassword } from '../../utils'
+import { getRouterPathWithLang, hashPassword, isPersonalMailDomain } from '../../utils'
 
 const props = defineProps({
     bindUserAddress: {
@@ -219,20 +219,25 @@ watch(canUseRandomSubdomain, (enabled) => {
 });
 
 const domainsOptions = computed(() => {
+    // 个人邮箱专用域名只能在「邮箱」页创建，临时邮箱里不显示
+    const personalDomains = openSettings.value.personalMailDomains || [];
+    const tempDomains = (openSettings.value.domains || []).filter((domain) => {
+        return !isPersonalMailDomain(domain.value, personalDomains);
+    });
     // if user has role, return role domains
     if (userSettings.value.user_role) {
         const allDomains = userSettings.value.user_role.domains;
-        if (!allDomains) return openSettings.value.domains;
-        return openSettings.value.domains.filter((domain) => {
+        if (!allDomains) return tempDomains;
+        return tempDomains.filter((domain) => {
             return allDomains.includes(domain.value);
         });
     }
     // if user has no role, return default domains
     if (!openSettings.value.defaultDomains) {
-        return openSettings.value.domains;
+        return tempDomains;
     }
     // if user has no role and no default domains, return all domains
-    return openSettings.value.domains.filter((domain) => {
+    return tempDomains.filter((domain) => {
         return openSettings.value.defaultDomains.includes(domain.value);
     });
 });

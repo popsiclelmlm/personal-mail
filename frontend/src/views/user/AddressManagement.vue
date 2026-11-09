@@ -6,12 +6,12 @@ import { NBadge, NPopconfirm, NButton, NDropdown, NTag, NSpace, NText } from 'na
 
 import { useGlobalState } from '../../store'
 import { api } from '../../api'
-import { getRouterPathWithLang } from '../../utils'
+import { getRouterPathWithLang, isPersonalMailDomain } from '../../utils'
 import AddressCredentialModal from '../../components/AddressCredentialModal.vue'
 
 import Login from '../common/Login.vue';
 
-const { jwt, loading } = useGlobalState()
+const { jwt, loading, openSettings } = useGlobalState()
 const message = useMessage()
 const router = useRouter()
 
@@ -94,10 +94,14 @@ const runAddressAction = async (key, row) => {
 }
 
 // 次要操作收进「更多」菜单；会让旧凭证失效的操作先确认
+// 个人邮箱专用域名下的地址只能是永久邮箱，不提供「保留 30 天」「改回临时」
+const isPersonalDomainRow = (row) => isPersonalMailDomain(
+    String(row.name || '').split('@').pop(), openSettings.value.personalMailDomains || []
+);
 const addressMenuOptions = (row) => [
     !row.is_permanent && { label: t('makePersonal'), key: 'permanent' },
-    { label: t('keep30Days'), key: 'extended' },
-    (row.is_permanent || row.retention_type === 'extended') && { label: t('makeTemporary'), key: 'temporary' },
+    !isPersonalDomainRow(row) && { label: t('keep30Days'), key: 'extended' },
+    !isPersonalDomainRow(row) && (row.is_permanent || row.retention_type === 'extended') && { label: t('makeTemporary'), key: 'temporary' },
     { type: 'divider', key: 'd1' },
     { label: t('resetCredential'), key: 'resetCredential' },
     row.credential_login_disabled

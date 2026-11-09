@@ -36,3 +36,13 @@ export const utcToLocalDate = (utcDate: string | null | undefined, useUTCDate: b
     }
     return utcDateString;
 }
+
+/** domain 是否属于个人邮箱专用域名（含子域名），和后端 personal_domains.ts 的判断一致 */
+export const isPersonalMailDomain = (domain: string | undefined | null, personalDomains: string[]): boolean => {
+    const target = typeof domain === 'string' ? domain.trim().toLowerCase() : ''
+    if (!target) return false
+    return personalDomains.some((item) => {
+        const base = typeof item === 'string' ? item.trim().toLowerCase() : ''
+        return !!base && (target === base || target.endsWith(`.${base}`))
+    })
+}

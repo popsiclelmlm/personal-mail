@@ -46,9 +46,9 @@ export default defineConfig({
         cleanupOutdatedCaches: true,
       },
       manifest: {
-        name: 'Free Temp Mail',
-        short_name: 'Free Temp Mail',
-        description: 'Free Temp Mail',
+        name: 'Magpiess Mail',
+        short_name: 'Magpiess Mail',
+        description: 'Magpiess Mail',
         theme_color: '#ffffff',
         icons: [
           { src: '/pwa-192.png', sizes: '192x192', type: 'image/png' },

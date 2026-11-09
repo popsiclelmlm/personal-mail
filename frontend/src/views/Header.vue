@@ -7,9 +7,9 @@ import { useIsMobile } from '../utils/composables'
 import {
     DarkModeFilled, LightModeFilled, MenuFilled,
     AdminPanelSettingsFilled, MonitorHeartFilled,
-    KeyboardArrowDownOutlined, OpenInNewOutlined
+    KeyboardArrowDownOutlined, HourglassEmptyOutlined
 } from '@vicons/material'
-import { Envelope, GithubAlt, Language, User } from '@vicons/fa'
+import { Envelope, Language, User } from '@vicons/fa'
 
 import { useGlobalState } from '../store'
 import { api } from '../api'
@@ -32,6 +32,7 @@ const isMobile = useIsMobile()
 
 const showMobileMenu = ref(false)
 const menuValue = computed(() => {
+    if (route.path.includes("mailbox")) return "mailbox";
     if (route.path.includes("user")) return "user";
     if (route.path.includes("admin")) return "admin";
     return "home";
@@ -102,14 +103,27 @@ const changeLocale = async (lang) => {
     if (localeSwitched) preferredLocale.value = lang;
 }
 
-const version = import.meta.env.PACKAGE_VERSION ? `v${import.meta.env.PACKAGE_VERSION}` : "";
-const showGithubForCurrentUser = computed(() => {
-    if (!openSettings.value.showGithub) return false;
-    if (openSettings.value.showGithubForUser) return true;
-    return showAdminPage.value;
-});
-
+// 导航顺序：邮箱（账号的个人邮箱）、临时邮箱（首页）、用户中心、管理后台（仅管理员）、深浅色
 const menuOptions = computed(() => [
+    {
+        label: () => h(NButton,
+            {
+                text: true,
+                size: "small",
+                type: menuValue.value == "mailbox" ? "primary" : "default",
+                style: "width: 100%",
+                onClick: async () => {
+                    await router.push(getRouterPathWithLang('/mailbox', locale.value));
+                    showMobileMenu.value = false;
+                }
+            },
+            {
+                default: () => t('mailbox'),
+                icon: () => h(NIcon, { component: Envelope })
+            }),
+        key: "mailbox",
+        show: showUserSystem.value && !isTelegram.value
+    },
     {
         label: () => h(NButton,
             {
@@ -123,8 +137,8 @@ const menuOptions = computed(() => [
                 }
             },
             {
-                default: () => t('mailbox'),
-                icon: () => h(NIcon, { component: Envelope })
+                default: () => t('tempMailbox'),
+                icon: () => h(NIcon, { component: HourglassEmptyOutlined })
             }),
         key: "home"
     },
@@ -232,7 +246,7 @@ onMounted(async () => {
                 <h3>{{ openSettings.title || t('title') }}</h3>
             </template>
             <template #avatar>
-                <n-avatar class="header-logo" src="/logo.png" />
+                <img class="header-logo" src="/logo.svg" width="36" height="36" alt="" />
             </template>
             <template #extra>
                 <n-space align="center" class="header-extra">
@@ -252,20 +266,6 @@ onMounted(async () => {
                             <n-icon :component="KeyboardArrowDownOutlined" style="margin-left: 4px;" />
                         </n-button>
                     </n-dropdown>
-                    <n-button
-                        v-if="!isMobile && showGithubForCurrentUser"
-                        text
-                        size="small"
-                        class="header-version-button"
-                        tag="a"
-                        target="_blank"
-                        href="https://github.com/dreamhunter2333/cloudflare_temp_email"
-                    >
-                        <template #icon>
-                            <n-icon :component="GithubAlt" />
-                        </template>
-                        {{ version || 'Github' }}
-                    </n-button>
                 </n-space>
             </template>
         </n-page-header>
@@ -280,17 +280,6 @@ onMounted(async () => {
                             <n-icon :component="KeyboardArrowDownOutlined" class="mobile-menu-action-arrow" />
                         </button>
                     </n-dropdown>
-                    <a
-                        v-if="showGithubForCurrentUser"
-                        class="mobile-menu-utility-button"
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        href="https://github.com/dreamhunter2333/cloudflare_temp_email"
-                    >
-                        <n-icon :component="GithubAlt" />
-                        <span class="mobile-menu-action-label">{{ version || 'Github' }}</span>
-                        <n-icon :component="OpenInNewOutlined" class="mobile-menu-action-arrow" />
-                    </a>
                 </div>
             </n-drawer-content>
         </n-drawer>
@@ -310,6 +299,9 @@ onMounted(async () => {
 
 <style scoped>
 .header-logo {
+    display: block;
+    width: 36px;
+    height: 36px;
     margin-left: 10px;
 }
 
@@ -370,19 +362,9 @@ onMounted(async () => {
     align-items: center;
 }
 
-.header-version-button {
-    display: inline-flex;
-    align-items: center;
-}
-
-.header-version-button :deep(.n-button__content) {
-    display: inline-flex;
-    align-items: center;
-}
-
 .mobile-menu-actions {
     display: grid;
-    grid-template-columns: repeat(2, minmax(0, 1fr));
+    grid-template-columns: minmax(0, 1fr);
     gap: 6px;
     margin-top: 12px;
     padding-top: 12px;
