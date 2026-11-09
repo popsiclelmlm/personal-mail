@@ -66,6 +66,33 @@
 - 开启 `REGISTER_WITH_PERSONAL_MAILBOX` 后，注册表单要输两次密码，提交前会弹框确认地址（注册后不能改名）；可以选填一个站外的**辅助邮箱**（`users.recovery_email`，不能用本站任何域名），之后在用户设置里修改，修改要输当前密码。找回密码时验证码发到辅助邮箱：需要后台开启邮件验证、设置发件地址并且能正常发信；没有辅助邮箱或不能发信时只能由管理员重设。管理后台的用户列表会显示辅助邮箱。
 - 开启 `REGISTER_WITH_PERSONAL_MAILBOX` 后，账号的登录邮箱不能解绑或转给别人（注销账号时照常选择删除或转移）；地址被管理员删掉后，只有账号本人能重新建这个地址。登录时邮箱不区分大小写。
 
+## 发信与找回密码
+
+Workers 免费版不能用 Cloudflare 的 `send_email` 向任意地址发信（需要 Workers Paid），所以用 Resend 免费版（每月 3000 封、每天 100 封，超出只拒发不收费）：
+
+1. 在 Resend 添加个人邮箱域名，按提示加 DNS 记录（都在 `send` 子域名和 DKIM 记录上，不影响根域名的 Email Routing 收信）；建议另加 `_dmarc` TXT `v=DMARC1; p=none;`。
+2. 建一个只有 Sending access、只限这个域名的 API Key，用 `wrangler secret put RESEND_TOKEN_<域名大写，点换成下划线>` 保存。用按域名区分的密钥而不是全局 `RESEND_TOKEN`，临时邮箱域名就不会走 Resend。
+3. 管理后台「用户设置」开启邮件验证，发件地址填 `noreply@个人邮箱域名`；再把这个地址加进「无限制发送地址列表」（找回密码的发信会检查发件地址的余额，`DEFAULT_SEND_BALANCE = 0` 时不加会报余额不足）。
+4. `ADDRESS_CHECK_REGEX` 里要包含 `noreply`，否则用户注册了这个名字就能无限发信。
+
+一次找回密码大约发 3 封：验证码 1 封，重设成功后给账号邮箱和辅助邮箱各发 1 封通知。站内发信额度或 Resend 额度用完、发得太快时，找回密码、注册验证码和用户发信接口返回 429 和「今天的发信额度已用完，请明天再试」这类提示，验证码不会被存下。
+
+## 保留地址名
+
+`ADDRESS_CHECK_REGEX` 对注册、建个人邮箱和匿名建临时邮箱都生效，管理员在后台建地址不受限制。名字校验前会去掉 `a-z0-9` 以外的字符（`no-reply` 会变成 `noreply`），所以正则里只写字母数字。建议分两组：冒充官方风险高的词按「包含」拦截，通用保留名按「完全相同」拦截，避免误伤正常名字：
+
+```
+^(?!.*(admin|postmaster|hostmaster|webmaster|abuse|noreply|品牌名))(?!(root|info|support|security|help|service|contact|mailerdaemon|system|official|billing|sales)$).*$
+```
+
+## 人机验证（Turnstile）
+
+在 Cloudflare 后台建一个 Turnstile widget（域名填邮箱网页的域名，模式选 Managed），Site Key 写进 `CF_TURNSTILE_SITE_KEY`，Secret 用 `wrangler secret put CF_TURNSTILE_SECRET_KEY` 保存。两者都有时，找回密码验证码、注册、匿名建临时邮箱都要先过人机验证；再设 `ENABLE_GLOBAL_TURNSTILE_CHECK = true` 会加上用户登录、邮箱地址登录和后台登录。前端各个表单有密钥时会自动显示验证组件。
+
+不要用 WAF 的 Managed Challenge 保护接口：前端用 fetch 调接口，接口请求过不了质询，只会让页面报错。
+
+本地验证可以用 Cloudflare 的测试密钥（Site Key `1x00000000000000000000AA`，Secret `1x0000000000000000000000000000000AA`，总是通过），`wrangler dev` 时用 `--var` 传入。
+
 ## 自动清理
 
 所有清理任务（按创建时间、不活跃、未绑定、空地址、邮件、发件箱）都跳过：
