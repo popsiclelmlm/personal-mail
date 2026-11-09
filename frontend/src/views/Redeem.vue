@@ -483,9 +483,9 @@ onMounted(loadContext)
     width: 42px;
     height: 42px;
     place-items: center;
-    color: #18a058;
+    color: #0167ea;
     font-size: 24px;
-    background: rgba(24, 160, 88, 0.12);
+    background: rgba(1, 103, 234, 0.12);
     border-radius: 8px;
 }
 
@@ -522,7 +522,7 @@ onMounted(loadContext)
 
 .type-card .n-icon {
     flex: 0 0 auto;
-    color: #18a058;
+    color: #0167ea;
     font-size: 20px;
 }
 
@@ -531,9 +531,9 @@ onMounted(loadContext)
 }
 
 .type-card.active {
-    color: #18a058;
-    border-color: rgba(24, 160, 88, 0.55);
-    background: rgba(24, 160, 88, 0.08);
+    color: #0167ea;
+    border-color: rgba(1, 103, 234, 0.55);
+    background: rgba(1, 103, 234, 0.08);
 }
 
 .redeem-card > :deep(.n-card__content) > .n-divider {
@@ -567,7 +567,7 @@ onMounted(loadContext)
 
 .detail-heading > .n-icon {
     flex: 0 0 auto;
-    color: #18a058;
+    color: #0167ea;
     font-size: 28px;
 }
 
@@ -599,7 +599,7 @@ onMounted(loadContext)
 }
 
 .success-state > .n-icon {
-    color: #18a058;
+    color: #0167ea;
     font-size: 50px;
 }
 

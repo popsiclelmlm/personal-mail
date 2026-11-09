@@ -21,6 +21,30 @@ const adClient = APP_CONFIG.GOOGLE_AD_CLIENT;
 const adSlot = APP_CONFIG.GOOGLE_AD_SLOT;
 const { locale } = useI18n({ useScope: 'global' });
 const theme = computed(() => isDark.value ? darkTheme : null)
+// 品牌色取自 Logo：浅色 #0167EA，深色模式提亮
+const lightThemeOverrides = {
+  common: {
+    primaryColor: '#0167EA',
+    primaryColorHover: '#2B80F0',
+    primaryColorPressed: '#0052BD',
+    primaryColorSuppl: '#2B80F0',
+  },
+}
+const darkThemeOverrides = {
+  common: {
+    primaryColor: '#3D8BFF',
+    primaryColorHover: '#5C9DFF',
+    primaryColorPressed: '#1F74F0',
+    primaryColorSuppl: '#5C9DFF',
+  },
+}
+const themeOverrides = computed(() => isDark.value ? darkThemeOverrides : lightThemeOverrides)
+
+watchEffect(() => {
+  if (typeof document === 'undefined') return
+  // 给非 Naive UI 的元素（比如顶栏标题）用的品牌色变量
+  document.documentElement.style.setProperty('--brand-accent-color', isDark.value ? '#3D8BFF' : '#0167EA')
+})
 const localeConfig = computed(() => getNaiveLocaleConfig(isSupportedLocale(locale.value) ? locale.value : DEFAULT_LOCALE))
 const isMobile = useIsMobile()
 const showSideMargin = computed(() => !isMobile.value && useSideMargin.value);
@@ -88,7 +112,8 @@ onMounted(async () => {
 </script>
 
 <template>
-  <n-config-provider :locale="localeConfig.locale" :date-locale="localeConfig.dateLocale" :theme="theme">
+  <n-config-provider :locale="localeConfig.locale" :date-locale="localeConfig.dateLocale" :theme="theme"
+    :theme-overrides="themeOverrides">
     <n-global-style />
     <n-spin description="loading..." :show="loading">
       <n-notification-provider container-style="margin-top: 60px;">

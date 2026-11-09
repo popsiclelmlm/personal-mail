@@ -225,6 +225,14 @@ const menuOptions = computed(() => [
     }
 ]);
 
+// 标题最后一个词用品牌色，例如 Magpiess + Mail
+const titleParts = computed(() => {
+    const title = openSettings.value.title || t('title');
+    const index = title.lastIndexOf(' ');
+    if (index <= 0) return { head: title, tail: '' };
+    return { head: title.slice(0, index + 1), tail: title.slice(index + 1) };
+});
+
 useHead({
     title: () => openSettings.value.title || t('title'),
     meta: [
@@ -243,10 +251,12 @@ onMounted(async () => {
     <div>
         <n-page-header>
             <template #title>
-                <h3>{{ openSettings.title || t('title') }}</h3>
+                <h3 class="header-title">
+                    {{ titleParts.head }}<span v-if="titleParts.tail" class="header-title-accent">{{ titleParts.tail }}</span>
+                </h3>
             </template>
             <template #avatar>
-                <img class="header-logo" src="/logo.svg" width="36" height="36" alt="" />
+                <img class="header-logo" :class="{ 'header-logo-dark': isDark }" src="/logo-mark.png" width="62" height="36" alt="" />
             </template>
             <template #extra>
                 <n-space align="center" class="header-extra">
@@ -300,9 +310,23 @@ onMounted(async () => {
 <style scoped>
 .header-logo {
     display: block;
-    width: 36px;
+    width: auto;
     height: 36px;
     margin-left: 10px;
+}
+
+/* 深色模式下喜鹊的深蓝头部和背景太接近，加一圈淡亮边 */
+.header-logo-dark {
+    filter: drop-shadow(0 0 0.6px rgba(255, 255, 255, 0.7)) drop-shadow(0 0 2px rgba(255, 255, 255, 0.18));
+}
+
+.header-title {
+    font-weight: 800;
+    letter-spacing: -0.01em;
+}
+
+.header-title-accent {
+    color: var(--brand-accent-color);
 }
 
 :deep(.n-page-header) {
