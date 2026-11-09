@@ -14,6 +14,7 @@ test('HTML pages get a CSP that forbids inline scripts and event handlers', asyn
     assert.ok(!scriptSrc.includes("'unsafe-eval'"), scriptSrc);
     assert.ok(scriptSrc.includes('https://challenges.cloudflare.com'), 'Turnstile must still load');
     assert.ok(scriptSrc.includes("'wasm-unsafe-eval'"), 'the WebAssembly mail parser must still load');
+    assert.ok(scriptSrc.includes('https://static.cloudflareinsights.com'), 'Cloudflare Web Analytics must still load');
     assert.match(csp, /object-src 'none'/);
     assert.equal(res.headers.get('x-content-type-options'), 'nosniff');
     // 原有的头、状态和正文保持不变
