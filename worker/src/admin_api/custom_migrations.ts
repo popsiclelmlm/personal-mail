@@ -18,6 +18,8 @@ export const CUSTOM_COLUMNS: CustomColumn[] = [
     // 个人邮箱（db/2026-11-09-personal-mailbox.sql）
     { table: 'address', column: 'credential_version', ddl: `ALTER TABLE address ADD COLUMN credential_version INTEGER DEFAULT 0` },
     { table: 'address', column: 'credential_login_disabled', ddl: `ALTER TABLE address ADD COLUMN credential_login_disabled INTEGER DEFAULT 0` },
+    // 辅助邮箱（db/2026-11-09-recovery-email.sql）
+    { table: 'users', column: 'recovery_email', ddl: `ALTER TABLE users ADD COLUMN recovery_email TEXT` },
 ];
 
 // 列补齐之后执行，必须可重复执行（IF NOT EXISTS）

@@ -652,7 +652,7 @@ const phase5 = async () => {
     const open2 = await call('GET', '/user_api/open_settings');
     check('open settings switch the form to personal mailbox sign-up', open2.data.registerWithPersonalMailbox === true
         && JSON.stringify(open2.data.personalMailDomains) === '["me.test"]'
-        && open2.data.enableMailVerify === false && open2.data.enableResetPassword === false, open2.data);
+        && open2.data.enableMailVerify === false, open2.data);
 
     const [invite] = await createInvites({ count: 1, max_uses: 3 });
     const name = `rg${RUN_ID}`;
@@ -667,8 +667,13 @@ const phase5 = async () => {
     const noInvite = await signup({ mailbox_name: name, password: sha256('rg-pw') });
     check('sign-up still needs an invite code', noInvite.status === 400, noInvite);
 
+    const ownRecovery = await signup({ mailbox_name: name, password: sha256('rg-pw'), invite_code: invite, recovery_email: `x@temp.test` });
+    check('a recovery email on this site is refused', ownRecovery.status === 400, ownRecovery);
+    const badRecovery = await signup({ mailbox_name: name, password: sha256('rg-pw'), invite_code: invite, recovery_email: 'not-an-email' });
+    check('an invalid recovery email is refused', badRecovery.status === 400, badRecovery);
+    const recoveryEmail = `backup${RUN_ID}@outside.test`;
     const ok = await call('POST', '/user_api/register', {
-        body: { mailbox_name: name.toUpperCase(), password: sha256('rg-pw'), invite_code: invite },
+        body: { mailbox_name: name.toUpperCase(), password: sha256('rg-pw'), invite_code: invite, recovery_email: recoveryEmail.toUpperCase() },
         headers: { 'cf-connecting-ip': ip },
     });
     check('sign up with name@personal-domain (no verify code needed)', ok.status === 200 && ok.data.email === address, ok);
@@ -677,9 +682,52 @@ const phase5 = async () => {
 
     const loginRes = await login(address.toUpperCase(), 'rg-pw');
     check('log in with the address, case-insensitively', loginRes.status === 200 && !!loginRes.data.jwt, loginRes);
-    const token = loginRes.data.jwt;
+    let token = loginRes.data.jwt;
     const settings = await call('GET', '/user_api/settings', { headers: userHeaders(token) });
     check('the new account gets the default role', settings.data.user_role?.role === 'member', settings.data);
+    check('the recovery email is saved in lowercase', settings.data.recovery_email === recoveryEmail, settings.data.recovery_email);
+    const adminList = await call('GET', `/admin/users?limit=10&offset=0&query=${encodeURIComponent(address)}`, { headers: admin });
+    check('admins can see the recovery email', adminList.data.results?.[0]?.recovery_email === recoveryEmail, adminList.data);
+
+    // 修改辅助邮箱要输当前密码
+    const wrongPw = await call('POST', '/user_api/recovery_email', {
+        body: { recovery_email: 'new@outside.test', password: sha256('nope') }, headers: userHeaders(token),
+    });
+    check('changing the recovery email needs the current password', wrongPw.status === 400, wrongPw);
+    const cleared = await call('POST', '/user_api/recovery_email', {
+        body: { recovery_email: '', password: sha256('rg-pw') }, headers: userHeaders(token),
+    });
+    check('the recovery email can be removed', cleared.status === 200 && cleared.data.recovery_email === null, cleared);
+    const restored = await call('POST', '/user_api/recovery_email', {
+        body: { recovery_email: recoveryEmail, password: sha256('rg-pw') }, headers: userHeaders(token),
+    });
+    check('the recovery email can be set again', restored.status === 200 && restored.data.recovery_email === recoveryEmail, restored);
+
+    // 找回密码：验证码发到辅助邮箱
+    const resetOpen = await call('GET', '/user_api/open_settings');
+    check('password reset goes through the recovery email', resetOpen.data.enableResetPassword === true
+        && resetOpen.data.resetViaRecoveryEmail === true, resetOpen.data);
+    const before = (await sinkMessages()).length;
+    const codeRes = await call('POST', '/user_api/verify_code', { body: { email: address.toUpperCase() }, headers: { 'cf-connecting-ip': randomIp() } });
+    check('requesting a reset code succeeds', codeRes.status === 200, codeRes);
+    let resetCode = null;
+    for (let i = 0; i < 20 && !resetCode; i++) {
+        resetCode = (await sinkMessages()).slice(before)
+            .filter((item) => item.to.includes(recoveryEmail))
+            .map((item) => item.data.match(/(\d{6})\s*$/m)?.[1]).filter(Boolean).at(-1) || null;
+        if (!resetCode) await sleep(250);
+    }
+    check('the reset code is sent to the recovery email', !!resetCode);
+    const noRecovery = await call('POST', '/user_api/verify_code', { body: { email: `nobody${RUN_ID}@me.test` } });
+    check('unknown accounts get the same answer (no account probing)', noRecovery.status === 200, noRecovery);
+    const reset = await call('POST', '/user_api/reset_password', {
+        body: { email: address, code: resetCode, password: sha256('rg-pw-2') }, headers: { 'cf-connecting-ip': randomIp() },
+    });
+    check('reset the password with the code', reset.status === 200, reset);
+    check('the old token stops working after the reset', (await call('GET', '/user_api/settings', { headers: userHeaders(token) })).status === 401);
+    const relogin = await login(address, 'rg-pw-2');
+    check('log in with the new password', relogin.status === 200, relogin);
+    token = relogin.data.jwt;
     const row = (await call('GET', '/user_api/mails/unread_counts', { headers: userHeaders(token) }))
         .data.results.find((item) => item.address === address);
     check('the personal mailbox is created, bound and permanent', row && row.is_permanent === 1, row);

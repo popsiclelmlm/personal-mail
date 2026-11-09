@@ -91,6 +91,7 @@ CREATE TABLE IF NOT EXISTS users (
     password TEXT NOT NULL,
     user_info TEXT,
     token_version INTEGER DEFAULT 0,
+    recovery_email TEXT,
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
     updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
 );

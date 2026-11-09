@@ -24,9 +24,21 @@ const showModal = ref(false);
 const user = ref({
     email: "",
     password: "",
+    confirmPassword: "",
     code: "",
-    inviteCode: ""
+    inviteCode: "",
+    recoveryEmail: ""
 });
+// 注册前确认地址（注册后不能改名）
+const showSignupConfirm = ref(false)
+const signupAddress = computed(() => `${mailboxName.value.trim().toLowerCase()}@${mailboxDomain.value || mailboxDomains.value[0] || ''}`)
+const passwordsMatch = () => {
+    if (user.value.password !== user.value.confirmPassword) {
+        message.error(t('passwordMismatch'));
+        return false;
+    }
+    return true;
+}
 // 用个人邮箱注册：账号就是「名字@个人邮箱域名」，注册时自动建好这个个人邮箱
 const withMailbox = computed(() => !!userOpenSettings.value.registerWithPersonalMailbox)
 const mailboxDomains = computed(() => userOpenSettings.value.personalMailDomains || [])
@@ -116,17 +128,25 @@ const sendVerificationCode = async () => {
     }
 };
 
-const mailboxSignup = async () => {
+// 先校验表单，再弹出确认框
+const requestMailboxSignup = () => {
     if (!mailboxName.value.trim() || !user.value.password) {
         message.error(t('pleaseInputMailbox'));
         return;
     }
+    if (!passwordsMatch()) return;
+    showSignupConfirm.value = true;
+};
+
+const mailboxSignup = async () => {
+    showSignupConfirm.value = false;
     try {
         const res = await api.fetch(`/user_api/register`, {
             method: "POST",
             body: JSON.stringify({
                 mailbox_name: mailboxName.value.trim(),
                 mailbox_domain: mailboxDomain.value || mailboxDomains.value[0],
+                recovery_email: user.value.recoveryEmail.trim() || undefined,
                 password: await hashPassword(user.value.password),
                 invite_code: user.value.inviteCode,
                 cf_token: signupCfToken.value
@@ -136,6 +156,7 @@ const mailboxSignup = async () => {
         if (res) {
             // 注册成功后把地址填进登录表单
             user.value.email = res.email || '';
+            user.value.confirmPassword = '';
             tabValue.value = "signin";
             message.success(t('registeredAs', { address: res.email || '' }));
         }
@@ -147,13 +168,14 @@ const mailboxSignup = async () => {
 
 const emailSignup = async () => {
     if (withMailbox.value) {
-        await mailboxSignup();
+        requestMailboxSignup();
         return;
     }
     if (!user.value.email || !user.value.password) {
         message.error(t('pleaseInput'));
         return;
     }
+    if (!passwordsMatch()) return;
     if (!user.value.code && userOpenSettings.value.enableMailVerify) {
         message.error(t('pleaseInputCode'));
         return;
@@ -190,6 +212,7 @@ const resetPassword = async () => {
         message.error(t('pleaseInputCode'));
         return;
     }
+    if (!passwordsMatch()) return;
     try {
         await api.fetch(`/user_api/reset_password`, {
             method: "POST",
@@ -305,8 +328,15 @@ onMounted(async () => {
                         <n-input v-model:value="user.email" />
                     </n-form-item-row>
                     <n-form-item-row :label="t('password')" required>
-                        <n-input v-model:value="user.password" type="password" show-password-on="click"
+                        <n-input v-model:value="user.password" type="password" show-password-on="click" />
+                    </n-form-item-row>
+                    <n-form-item-row :label="t('confirmPassword')" required>
+                        <n-input v-model:value="user.confirmPassword" type="password" show-password-on="click"
                             @keyup.enter="emailSignup" />
+                    </n-form-item-row>
+                    <n-form-item-row v-if="withMailbox" :label="t('recoveryEmail')"
+                        :feedback="t('recoveryEmailTip')">
+                        <n-input v-model:value="user.recoveryEmail" :placeholder="t('recoveryEmailPlaceholder')" />
                     </n-form-item-row>
                     <n-form-item-row v-if="userOpenSettings.registerMode === 'invite'" :label="t('inviteCode')" required>
                         <n-input v-model:value="user.inviteCode" :placeholder="t('inviteCodePlaceholder')" />
@@ -329,13 +359,27 @@ onMounted(async () => {
                 </n-button>
             </n-tab-pane>
         </n-tabs>
+        <n-modal v-model:show="showSignupConfirm" preset="dialog" :title="t('confirmSignupTitle')"
+            :positive-text="t('register')" :negative-text="t('cancel')" @positive-click="mailboxSignup">
+            <p class="signup-confirm-address">{{ signupAddress }}</p>
+            <p>{{ t('confirmSignupTip') }}</p>
+            <p v-if="user.recoveryEmail.trim()">{{ t('confirmSignupRecovery', { email: user.recoveryEmail.trim() }) }}</p>
+            <p v-else>{{ t('confirmSignupNoRecovery') }}</p>
+        </n-modal>
         <n-modal v-model:show="showModal" style="max-width: 600px;" preset="card" :title="t('forgotPassword')">
             <n-form v-if="userOpenSettings.enableResetPassword">
+                <n-alert v-if="userOpenSettings.resetViaRecoveryEmail" :show-icon="false" :bordered="false"
+                    style="margin-bottom: 12px;">
+                    {{ t('resetViaRecoveryEmailTip') }}
+                </n-alert>
                 <n-form-item-row :label="t('email')" required>
-                    <n-input v-model:value="user.email" />
+                    <n-input v-model:value="user.email" :placeholder="loginEmailPlaceholder || undefined" />
                 </n-form-item-row>
                 <n-form-item-row :label="t('newPassword')" required>
-                    <n-input v-model:value="user.password" type="password" show-password-on="click"
+                    <n-input v-model:value="user.password" type="password" show-password-on="click" />
+                </n-form-item-row>
+                <n-form-item-row :label="t('confirmPassword')" required>
+                    <n-input v-model:value="user.confirmPassword" type="password" show-password-on="click"
                         @keyup.enter="resetPassword" />
                 </n-form-item-row>
                 <Turnstile ref="resetTurnstileRef" v-model:value="resetCfToken" />
@@ -372,6 +416,13 @@ onMounted(async () => {
 
 .n-button {
     margin-top: 10px;
+}
+
+.signup-confirm-address {
+    margin: 4px 0 8px;
+    font-size: 18px;
+    font-weight: 700;
+    word-break: break-all;
 }
 
 .mailbox-account {

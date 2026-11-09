@@ -29,7 +29,7 @@ export default {
             console.error("Failed to get oauth2 settings", e);
         }
         const registerMode = resolveRegisterMode(c.env.REGISTER_MODE);
-        // 用个人邮箱注册时账号就是站内地址，不走邮件验证，也没有自助重设密码（只能由管理员重设）
+        // 用个人邮箱注册时账号就是站内地址，注册不走邮件验证；找回密码的验证码发到账号的辅助邮箱
         const withMailbox = isRegisterWithPersonalMailbox(c);
         return c.json({
             enable: settings.enable && registerMode !== 'closed',
@@ -38,8 +38,9 @@ export default {
             registerMode: registerMode,
             registerWithPersonalMailbox: withMailbox,
             personalMailDomains: withMailbox ? getPersonalMailDomains(c) : [],
-            // 重设密码要靠邮箱验证码
-            enableResetPassword: !withMailbox && !!(settings.enableMailVerify && settings.verifyMailSender && c.env.KV),
+            // 重设密码要靠邮箱验证码（后台开启邮件验证并设置发件地址，且能正常发信）
+            enableResetPassword: !!(settings.enableMailVerify && settings.verifyMailSender && c.env.KV),
+            resetViaRecoveryEmail: withMailbox,
         })
     },
     settings: async (c: Context<HonoCustomType>) => {
@@ -80,7 +81,15 @@ export default {
             + ` FROM users_address ua JOIN address a ON a.id = ua.address_id WHERE ua.user_id = ?`
         ).bind(db_user_id).first<{ address_count: number, permanent_address_count: number }>();
         const userSettings = new UserSettings(await getJsonSetting(c, CONSTANTS.USER_SETTINGS_KEY));
+        let recovery_email: string | null = null;
+        try {
+            recovery_email = await c.env.DB.prepare(`SELECT recovery_email FROM users WHERE id = ?`)
+                .bind(db_user_id).first<string | null>('recovery_email');
+        } catch (e) {
+            console.warn('recovery_email column is missing; run the database migration', (e as Error).message);
+        }
         return c.json({
+            recovery_email,
             ...user,
             is_admin: is_admin,
             access_token: access_token,

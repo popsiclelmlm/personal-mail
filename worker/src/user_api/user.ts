@@ -1,7 +1,7 @@
 import { Context } from 'hono';
 
 import i18n from '../i18n';
-import utils, { checkCfTurnstile, getJsonSetting, checkUserPassword, getUserRoles, getStringValue, getMailDomain, includesDomain, getBooleanValue, getPersonalMailDomains } from "../utils"
+import utils, { checkCfTurnstile, getJsonSetting, checkUserPassword, getUserRoles, getStringValue, getMailDomain, includesDomain, getBooleanValue, getPersonalMailDomains, getDomains } from "../utils"
 import { CONSTANTS } from "../constants";
 import { GeoData, UserInfo, UserSettings } from "../models";
 import { sendMail } from "../mails_api/send_mail_api";
@@ -14,6 +14,7 @@ import {
 } from "./invite";
 import { prepareNewAddress } from "../common";
 import { grantPersonalSendBalance } from "./bind_address";
+import { normalizeRecoveryEmail } from "../recovery_email";
 import { bumpUserTokenVersion, signUserToken } from "./user_token";
 
 const getRequestIp = (c: Context<HonoCustomType>): string | null => c.req.raw.headers.get("cf-connecting-ip");
@@ -51,6 +52,21 @@ const checkVerifyCode = async (
 export const isRegisterWithPersonalMailbox = (c: Context<HonoCustomType>): boolean =>
     getBooleanValue(c.env.REGISTER_WITH_PERSONAL_MAILBOX) && getPersonalMailDomains(c).length > 0;
 
+/** 校验辅助邮箱；返回规范化后的值，或者要直接回给客户端的错误提示 */
+export const checkRecoveryEmail = (
+    c: Context<HonoCustomType>,
+    value: unknown,
+): { email: string | null } | { error: string } => {
+    const msgs = i18n.getMessagesbyContext(c);
+    const result = normalizeRecoveryEmail(value, getDomains(c));
+    if (result.ok) return { email: result.email };
+    return { error: result.reason === 'own_domain' ? msgs.RecoveryEmailOwnDomainMsg : msgs.InvalidRecoveryEmailMsg };
+};
+
+/** 个人邮箱注册模式下账号地址统一小写 */
+const normalizeAccountEmail = (c: Context<HonoCustomType>, email: string): string =>
+    isRegisterWithPersonalMailbox(c) ? email.trim().toLowerCase() : email;
+
 /** 要授予新用户的角色：邀请码上指定的角色优先，其次 USER_DEFAULT_ROLE */
 const resolveRoleToGrant = (
     c: Context<HonoCustomType>,
@@ -61,9 +77,53 @@ const resolveRoleToGrant = (
     return { role, valid: getUserRoles(c).some((r) => r.role === role) };
 };
 
+/**
+ * 个人邮箱注册模式下的找回密码验证码：按账号地址找到辅助邮箱，把验证码发过去（验证码仍按账号地址存）。
+ * 不论账号是否存在、是否设置了辅助邮箱都返回同样的结果，避免探测账号。
+ */
+const sendResetCodeToRecoveryEmail = async (
+    c: Context<HonoCustomType>,
+    settings: UserSettings,
+    rawEmail: unknown,
+) => {
+    const msgs = i18n.getMessagesbyContext(c);
+    if (typeof rawEmail !== 'string' || !rawEmail.trim()) {
+        return c.text(msgs.InvalidEmailOrPasswordMsg, 400);
+    }
+    if (!settings.enableMailVerify || !settings.verifyMailSender || !c.env.KV) {
+        return c.text(msgs.ResetPasswordNotAvailableMsg, 403);
+    }
+    const email = rawEmail.trim().toLowerCase();
+    const expirationTtl = 300;
+    if (await c.env.KV.get(verifyCodeKey(email))) {
+        return c.text(msgs.CodeAlreadySentMsg, 400);
+    }
+    const recoveryEmail = await c.env.DB.prepare(
+        `SELECT recovery_email FROM users WHERE user_email = ?`
+    ).bind(email).first<string | null>('recovery_email');
+    if (recoveryEmail) {
+        const code = Math.floor(100000 + Math.random() * 900000).toString();
+        try {
+            await sendMail(c, settings.verifyMailSender, {
+                from_name: "Magpiess Mail",
+                to_name: '',
+                to_mail: recoveryEmail,
+                subject: msgs.ResetCodeMailSubjectMsg,
+                content: `${msgs.ResetCodeMailContentMsg} ${code}`,
+                is_html: false,
+            });
+        } catch (e) {
+            return c.text(`Failed to send verify code: ${(e as Error).message}`, 500);
+        }
+        await c.env.KV.put(verifyCodeKey(email), code, { expirationTtl });
+    }
+    return c.json({ success: true, expirationTtl });
+};
+
 export default {
     verifyCode: async (c: Context<HonoCustomType>) => {
-        const { email, cf_token } = await c.req.json();
+        const body = await c.req.json();
+        const { cf_token } = body;
         const msgs = i18n.getMessagesbyContext(c);
         // check cf turnstile
         try {
@@ -73,6 +133,10 @@ export default {
         }
         const value = await getJsonSetting(c, CONSTANTS.USER_SETTINGS_KEY);
         const settings = new UserSettings(value)
+        if (isRegisterWithPersonalMailbox(c)) {
+            return await sendResetCodeToRecoveryEmail(c, settings, body.email);
+        }
+        const { email } = body;
         // check mail domain allow list
         const mailDomain = getMailDomain(email);
         if (settings.enableMailAllowList
@@ -138,7 +202,11 @@ export default {
         // 用个人邮箱注册：账号就是「名字@个人邮箱域名」，不填站外邮箱，也不走邮件验证和站外邮箱白名单
         let email = withMailbox ? null : body.email;
         let mailboxAddress: string | null = null;
+        let recoveryEmail: string | null = null;
         if (withMailbox) {
+            const recovery = checkRecoveryEmail(c, body.recovery_email);
+            if ('error' in recovery) return c.text(recovery.error, 400);
+            recoveryEmail = recovery.email;
             if (typeof body.mailbox_name !== 'string' || !body.mailbox_name.trim() || typeof password !== 'string' || !password) {
                 return c.text(msgs.InvalidEmailOrPasswordMsg, 400)
             }
@@ -251,6 +319,11 @@ export default {
                 .bind(mailboxAddress, reqIp || 'register', email));
             statements.push(c.env.DB.prepare(BIND_PERSONAL_MAILBOX_AFTER_USER_SQL).bind(mailboxAddress, email));
         }
+        // 放在批次最后，不影响前面语句用 changes() 串起来的判断
+        if (recoveryEmail) {
+            statements.push(c.env.DB.prepare(`UPDATE users SET recovery_email = ? WHERE user_email = ?`)
+                .bind(recoveryEmail, email));
+        }
         let results: D1Result[];
         try {
             results = await c.env.DB.batch(statements);
@@ -275,6 +348,35 @@ export default {
             if (userId) await grantPersonalSendBalance(c, userId, mailboxAddress);
         }
         return c.json({ success: true, email })
+    },
+    updateRecoveryEmail: async (c: Context<HonoCustomType>) => {
+        const msgs = i18n.getMessagesbyContext(c);
+        const { user_id, user_email } = c.get('userPayload');
+        const { recovery_email, password } = await c.req.json();
+        const recovery = checkRecoveryEmail(c, recovery_email);
+        if ('error' in recovery) return c.text(recovery.error, 400);
+        if (typeof password !== 'string' || !password) {
+            return c.text(msgs.InvalidEmailOrPasswordMsg, 400);
+        }
+        // 改辅助邮箱等于改找回密码的渠道，要先验证当前密码
+        const guardKey = authGuardKey('recovery_email', getRequestIp(c), user_email);
+        if (await isAuthLocked(c.env.KV, guardKey)) {
+            return c.text(msgs.TooManyAttemptsMsg, 429);
+        }
+        const stored = await c.env.DB.prepare(`SELECT password FROM users WHERE id = ?`)
+            .bind(user_id).first<string | null>('password');
+        const { ok } = await verifyUserPassword(
+            password, stored, resolvePbkdf2Iterations(c.env.PASSWORD_PBKDF2_ITERATIONS)
+        );
+        if (!ok) {
+            const locked = await recordAuthFailure(c.env.KV, guardKey);
+            return locked ? c.text(msgs.TooManyAttemptsMsg, 429) : c.text(msgs.WrongPasswordMsg, 400);
+        }
+        await clearAuthFailures(c.env.KV, guardKey);
+        await c.env.DB.prepare(
+            `UPDATE users SET recovery_email = ?, updated_at = datetime('now') WHERE id = ?`
+        ).bind(recovery.email, user_id).run();
+        return c.json({ success: true, recovery_email: recovery.email });
     },
     login: async (c: Context<HonoCustomType>) => {
         const { email, password, cf_token } = await c.req.json();
@@ -334,10 +436,11 @@ export default {
         if (!settings.enableMailVerify || !settings.verifyMailSender || !c.env.KV) {
             return c.text(msgs.ResetPasswordNotAvailableMsg, 403);
         }
-        const { email, code, password } = await c.req.json();
-        if (!email || !password || typeof email !== 'string' || typeof password !== 'string') {
+        const { email: rawEmail, code, password } = await c.req.json();
+        if (!rawEmail || !password || typeof rawEmail !== 'string' || typeof password !== 'string') {
             return c.text(msgs.InvalidEmailOrPasswordMsg, 400);
         }
+        const email = normalizeAccountEmail(c, rawEmail);
         checkUserPassword(password);
         if (!code) {
             return c.text(msgs.InvalidVerifyCodeMsg, 400);
@@ -345,8 +448,8 @@ export default {
         const codeResponse = await checkVerifyCode(c, email, code);
         if (codeResponse) return codeResponse;
         const user = await c.env.DB.prepare(
-            `SELECT id, user_email FROM users WHERE user_email = ?`
-        ).bind(email).first<{ id: number, user_email: string }>();
+            `SELECT id, user_email, recovery_email FROM users WHERE user_email = ?`
+        ).bind(email).first<{ id: number, user_email: string, recovery_email: string | null }>();
         if (!user) {
             return c.text(msgs.UserNotFoundMsg, 400);
         }
@@ -358,19 +461,22 @@ export default {
             + ` updated_at = datetime('now') WHERE id = ?`
         ).bind(passwordHash, user.id).run();
         await c.env.KV.delete(verifyCodeKey(email));
-        // 通知账号邮箱；发送失败不影响重设结果
+        // 通知账号邮箱和辅助邮箱；发送失败不影响重设结果
+        const notifyTargets = [user.user_email, user.recovery_email].filter((item): item is string => !!item);
         c.executionCtx.waitUntil((async () => {
-            try {
-                await sendMail(c, settings.verifyMailSender as string, {
-                    from_name: "Magpiess Mail",
-                    to_name: '',
-                    to_mail: user.user_email,
-                    subject: msgs.PasswordResetMailSubjectMsg,
-                    content: msgs.PasswordResetMailContentMsg,
-                    is_html: false,
-                });
-            } catch (e) {
-                console.warn("[reset_password] failed to send notification:", (e as Error).message);
+            for (const target of notifyTargets) {
+                try {
+                    await sendMail(c, settings.verifyMailSender as string, {
+                        from_name: "Magpiess Mail",
+                        to_name: '',
+                        to_mail: target,
+                        subject: msgs.PasswordResetMailSubjectMsg,
+                        content: msgs.PasswordResetMailContentMsg,
+                        is_html: false,
+                    });
+                } catch (e) {
+                    console.warn("[reset_password] failed to send notification:", (e as Error).message);
+                }
             }
         })());
         return c.json({ success: true });

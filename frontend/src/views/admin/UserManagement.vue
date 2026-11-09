@@ -154,6 +154,13 @@ const columns = [
         key: "user_email"
     },
     {
+        title: t('recovery_email'),
+        key: "recovery_email",
+        render(row) {
+            return row.recovery_email || '-'
+        }
+    },
+    {
         title: t('role'),
         key: "role_text",
         render(row) {

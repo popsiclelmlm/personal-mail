@@ -195,6 +195,11 @@ export type LocaleMessages = {
     PersonalMailDomainNotConfiguredMsg: string
     PersonalMailDomainPermanentOnlyMsg: string
     LoginMailboxLockedMsg: string
+    InvalidRecoveryEmailMsg: string
+    RecoveryEmailOwnDomainMsg: string
+    WrongPasswordMsg: string
+    ResetCodeMailSubjectMsg: string
+    ResetCodeMailContentMsg: string
     InviteCodeRequiredMsg: string
     InviteCodeInvalidMsg: string
     TooManyAttemptsMsg: string

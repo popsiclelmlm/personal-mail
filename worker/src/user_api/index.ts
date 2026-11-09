@@ -40,6 +40,7 @@ api.post('/user_api/login', user.login);
 api.post('/user_api/verify_code', user.verifyCode);
 api.post('/user_api/register', user.register);
 api.post('/user_api/reset_password', user.resetPassword);
+api.post('/user_api/recovery_email', user.updateRecoveryEmail);
 api.post('/user_api/logout_all', user.logoutAll);
 
 // oauth2 api

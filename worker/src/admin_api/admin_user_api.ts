@@ -47,7 +47,7 @@ export default {
             const userEmailWhere = useInstr ? `instr(u.user_email, ?) > 0` : `u.user_email like ?`;
             const userEmailWhereCount = useInstr ? `instr(user_email, ?) > 0` : `user_email like ?`;
             return await handleListQuery(c,
-                `SELECT u.id as id, u.user_email, u.created_at, u.updated_at,`
+                `SELECT u.id as id, u.user_email, u.recovery_email, u.created_at, u.updated_at,`
                 + ` ur.role_text as role_text,`
                 + ` (SELECT COUNT(*) FROM users_address WHERE user_id = u.id) AS address_count`
                 + ` FROM users u`
@@ -58,7 +58,7 @@ export default {
             );
         }
         return await handleListQuery(c,
-            `SELECT u.id as id, u.user_email, u.created_at, u.updated_at,`
+            `SELECT u.id as id, u.user_email, u.recovery_email, u.created_at, u.updated_at,`
             + ` ur.role_text as role_text,`
             + ` (SELECT COUNT(*) FROM users_address WHERE user_id = u.id) AS address_count`
             + ` FROM users u`

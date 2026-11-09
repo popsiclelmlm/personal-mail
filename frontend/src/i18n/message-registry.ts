@@ -544,6 +544,15 @@ export const MESSAGE_REGISTRY = {
     }
   },
   "views.user.UserSettings": {
+    "recoveryEmail": { "en": "Recovery email", "zh": "辅助邮箱" },
+    "recoveryNotSet": { "en": "Not set", "zh": "未设置" },
+    "recoverySet": { "en": "Set", "zh": "设置" },
+    "recoveryChange": { "en": "Change", "zh": "修改" },
+    "recoveryTip": { "en": "Used to reset your password. Use an outside mailbox; leave empty to remove it.", "zh": "用来找回密码，请填站外的常用邮箱；清空后保存即可删除。" },
+    "recoveryPlaceholder": { "en": "e.g. your Gmail or Outlook address", "zh": "例如你的 QQ 邮箱或 Gmail" },
+    "recoveryPasswordRequired": { "en": "Enter your current password", "zh": "请输入当前密码" },
+    "recoverySave": { "en": "Save", "zh": "保存" },
+    "recoverySaved": { "en": "Recovery email saved", "zh": "辅助邮箱已保存" },
     "addressQuota": {
       "en": "Addresses",
       "zh": "地址"
@@ -1196,6 +1205,17 @@ export const MESSAGE_REGISTRY = {
     "pleaseInputMailbox": { "en": "Enter the mailbox name and password", "zh": "请输入邮箱名字和密码" },
     "registeredAs": { "en": "Signed up. Log in with {address}", "zh": "注册成功，请用 {address} 登录" },
     "loginEmailPlaceholder": { "en": "e.g. {example}", "zh": "例如 {example}" },
+    "confirmPassword": { "en": "Confirm password", "zh": "确认密码" },
+    "passwordMismatch": { "en": "The two passwords do not match", "zh": "两次输入的密码不一致" },
+    "recoveryEmail": { "en": "Recovery email (optional)", "zh": "辅助邮箱（可选）" },
+    "recoveryEmailTip": { "en": "Used to reset your password. Use an outside mailbox, not one on this site.", "zh": "用来找回密码，请填站外的常用邮箱，不能用本站的地址。" },
+    "recoveryEmailPlaceholder": { "en": "e.g. your Gmail or Outlook address", "zh": "例如你的 QQ 邮箱或 Gmail" },
+    "confirmSignupTitle": { "en": "Sign up with this address?", "zh": "确认用这个地址注册？" },
+    "confirmSignupTip": { "en": "The address cannot be changed after sign-up. You will log in with it.", "zh": "注册后地址不能修改，以后用它登录。" },
+    "confirmSignupRecovery": { "en": "Recovery email: {email}", "zh": "辅助邮箱：{email}" },
+    "confirmSignupNoRecovery": { "en": "No recovery email: if you forget the password, only the administrator can reset it.", "zh": "没有填辅助邮箱：忘了密码只能由管理员重设。" },
+    "cancel": { "en": "Cancel", "zh": "取消" },
+    "resetViaRecoveryEmailTip": { "en": "The code is sent to the recovery email of the account. Accounts without one need the administrator to reset the password.", "zh": "验证码会发到这个账号的辅助邮箱；没有设置辅助邮箱的账号请联系管理员重设密码。" },
     "newPassword": {
       "en": "New password",
       "zh": "新密码"
@@ -2492,6 +2512,7 @@ export const MESSAGE_REGISTRY = {
     }
   },
   "views.admin.UserManagement": {
+    "recovery_email": { "en": "Recovery email", "zh": "辅助邮箱" },
     "actions": {
       "en": "Actions",
       "zh": "操作"

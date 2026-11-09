@@ -22,6 +22,10 @@ const showPasskeyList = ref(false)
 const showRenamePasskey = ref(false)
 const currentPasskeyId = ref(null)
 const currentPasskeyName = ref('')
+// 辅助邮箱：用来找回密码，修改时要输入当前密码
+const showRecoveryEmail = ref(false)
+const recoveryForm = ref({ email: '', password: '' })
+const savingRecovery = ref(false)
 
 const { t } = useScopedI18n('views.user.UserSettings')
 
@@ -70,6 +74,35 @@ const deleteAccount = async () => {
         location.reload()
     } catch (e) {
         message.error(e.message || 'error')
+    }
+}
+
+const openRecoveryEmail = () => {
+    recoveryForm.value = { email: userSettings.value.recovery_email || '', password: '' }
+    showRecoveryEmail.value = true
+}
+
+const saveRecoveryEmail = async () => {
+    if (!recoveryForm.value.password) {
+        message.error(t('recoveryPasswordRequired'))
+        return
+    }
+    savingRecovery.value = true
+    try {
+        const res = await api.fetch(`/user_api/recovery_email`, {
+            method: 'POST',
+            body: JSON.stringify({
+                recovery_email: recoveryForm.value.email.trim(),
+                password: await hashPassword(recoveryForm.value.password),
+            }),
+        })
+        userSettings.value.recovery_email = res.recovery_email || null
+        showRecoveryEmail.value = false
+        message.success(t('recoverySaved'))
+    } catch (e) {
+        message.error(e.message || 'error')
+    } finally {
+        savingRecovery.value = false
     }
 }
 
@@ -224,6 +257,13 @@ const renamePasskey = async () => {
                 <n-descriptions-item :label="t('personalQuota')">
                     {{ userSettings.permanent_address_count ?? 0 }} / {{ userSettings.max_permanent_address_count ?? 0 }}
                 </n-descriptions-item>
+                <n-descriptions-item :label="t('recoveryEmail')">
+                    <span v-if="userSettings.recovery_email">{{ userSettings.recovery_email }}</span>
+                    <n-text v-else depth="3">{{ t('recoveryNotSet') }}</n-text>
+                    <n-button text type="primary" size="small" style="margin-left: 8px;" @click="openRecoveryEmail">
+                        {{ userSettings.recovery_email ? t('recoveryChange') : t('recoverySet') }}
+                    </n-button>
+                </n-descriptions-item>
             </n-descriptions>
             <n-button @click="showPasskeyList = true; fetchPasskeyList();" secondary block strong>
                 {{ t('showPasskeyList') }}
@@ -246,6 +286,20 @@ const renamePasskey = async () => {
                 {{ t('deleteAccount') }}
             </n-button>
         </n-card>
+        <n-modal v-model:show="showRecoveryEmail" preset="card" :title="t('recoveryEmail')" style="max-width: 480px;">
+            <n-form>
+                <n-form-item-row :label="t('recoveryEmail')" :feedback="t('recoveryTip')">
+                    <n-input v-model:value="recoveryForm.email" :placeholder="t('recoveryPlaceholder')" clearable />
+                </n-form-item-row>
+                <n-form-item-row :label="t('currentPassword')" required>
+                    <n-input v-model:value="recoveryForm.password" type="password" show-password-on="click"
+                        @keyup.enter="saveRecoveryEmail" />
+                </n-form-item-row>
+                <n-button type="primary" block :loading="savingRecovery" @click="saveRecoveryEmail">
+                    {{ t('recoverySave') }}
+                </n-button>
+            </n-form>
+        </n-modal>
         <n-modal v-model:show="showDeleteAccount" preset="card" :title="t('deleteAccount')" style="max-width: 560px;">
             <n-space v-if="deletePreview" vertical :size="16">
                 <n-text>{{ t('deleteAccountTip') }}</n-text>
