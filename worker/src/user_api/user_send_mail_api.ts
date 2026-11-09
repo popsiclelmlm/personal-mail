@@ -3,6 +3,7 @@ import { Context } from "hono";
 import { handleListQuery } from "../common";
 import i18n from "../i18n";
 import { sendMail } from "../mails_api/send_mail_api";
+import { SendQuotaError } from "../mails_api/send_quota_error";
 import {
     getSendBalanceState,
     requestSendMailAccess,
@@ -65,6 +66,8 @@ const send = async (c: Context<HonoCustomType>): Promise<Response> => {
         await sendMail(c, address, reqJson);
     } catch (error) {
         console.error("Failed to send user mail", error);
+        // 额度用完或发得太快：直接给出友好提示
+        if (error instanceof SendQuotaError) return c.text(error.message, 429);
         return c.text(`Failed to send mail ${(error as Error).message}`, 400);
     }
     return c.json({ status: "ok" });

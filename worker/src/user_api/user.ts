@@ -5,6 +5,7 @@ import utils, { checkCfTurnstile, getJsonSetting, checkUserPassword, getUserRole
 import { CONSTANTS } from "../constants";
 import { GeoData, UserInfo, UserSettings } from "../models";
 import { sendMail } from "../mails_api/send_mail_api";
+import { SendQuotaError } from "../mails_api/send_quota_error";
 import { hashUserPassword, resolvePbkdf2Iterations, verifyUserPassword } from "./password";
 import { authGuardKey, clearAuthFailures, isAuthLocked, recordAuthFailure } from "./auth_guard";
 import {
@@ -113,6 +114,8 @@ const sendResetCodeToRecoveryEmail = async (
                 is_html: false,
             });
         } catch (e) {
+            // 额度用完或发得太快：直接给出友好提示
+            if (e instanceof SendQuotaError) return c.text(e.message, 429);
             return c.text(`Failed to send verify code: ${(e as Error).message}`, 500);
         }
         await c.env.KV.put(verifyCodeKey(email), code, { expirationTtl });
@@ -177,6 +180,8 @@ export default {
                 is_html: false,
             })
         } catch (e) {
+            // 额度用完或发得太快：直接给出友好提示
+            if (e instanceof SendQuotaError) return c.text(e.message, 429);
             return c.text(`Failed to send verify code: ${(e as Error).message}`, 500)
         }
         // save to KV

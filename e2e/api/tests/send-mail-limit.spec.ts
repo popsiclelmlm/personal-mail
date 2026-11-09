@@ -242,7 +242,7 @@ test.describe('Send Mail Limit', () => {
     });
     expect(res.ok()).toBe(false);
     const text = await res.text();
-    expect(text).toContain('Server daily send quota has been reached');
+    expect(text).toContain("Today's sending quota has been used up");
 
     await deleteAddress(request, jwt);
   });
@@ -274,7 +274,7 @@ test.describe('Send Mail Limit', () => {
     });
     expect(blocked.ok()).toBe(false);
     const text = await blocked.text();
-    expect(text).toContain('Server daily send quota has been reached');
+    expect(text).toContain("Today's sending quota has been used up");
 
     await deleteAddress(request, jwt);
   });
@@ -306,7 +306,7 @@ test.describe('Send Mail Limit', () => {
     });
     expect(blocked.ok()).toBe(false);
     const text = await blocked.text();
-    expect(text).toContain('Server monthly send quota has been reached');
+    expect(text).toContain("This month's sending quota has been used up");
 
     await deleteAddress(request, jwt);
   });
@@ -330,7 +330,7 @@ test.describe('Send Mail Limit', () => {
     });
     expect(res.ok()).toBe(false);
     const text = await res.text();
-    expect(text).toContain('服务器今日发信次数已达上限');
+    expect(text).toContain('今天的发信额度已用完');
 
     await deleteAddress(request, jwt);
   });
@@ -387,7 +387,7 @@ test.describe('Send Mail Limit', () => {
     });
     expect(res.ok()).toBe(false);
     const text = await res.text();
-    expect(text).toContain('Server daily send quota has been reached');
+    expect(text).toContain("Today's sending quota has been used up");
 
     await deleteAddress(request, jwt);
   });
@@ -525,7 +525,7 @@ test.describe('Send Mail Limit', () => {
     });
     expect(res.ok()).toBe(false);
     const text = await res.text();
-    expect(text).toContain('Server daily send quota has been reached');
+    expect(text).toContain("Today's sending quota has been used up");
 
     await deleteAddress(request, jwt);
   });

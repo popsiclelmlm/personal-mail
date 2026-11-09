@@ -3,12 +3,10 @@ import i18n from "../i18n";
 import { SendMailLimitConfig } from "../models";
 import { CONSTANTS } from "../constants";
 import { getJsonObjectValue, getSetting } from "../utils";
+import { SendQuotaError } from "./send_quota_error";
 
-class SendMailLimitError extends Error {
-    constructor(message: string) {
-        super(message);
-    }
-}
+// 站内发信额度用完：沿用 SendQuotaError，调用方返回 429 和友好提示
+class SendMailLimitError extends SendQuotaError {}
 
 const parseLimitValue = (value: unknown): number | null => {
     if (value === null || typeof value === "undefined") {
@@ -137,13 +135,13 @@ export const ensureSendMailLimit = async (
         if (config.dailyEnabled && config.dailyLimit !== null && config.dailyLimit !== -1) {
             const current = await getCount(c, getDailyCountKey());
             if (current >= config.dailyLimit) {
-                throw new SendMailLimitError(msgs.ServerSendMailDailyLimitMsg);
+                throw new SendMailLimitError('daily', msgs.ServerSendMailDailyLimitMsg);
             }
         }
         if (config.monthlyEnabled && config.monthlyLimit !== null && config.monthlyLimit !== -1) {
             const current = await getCount(c, getMonthlyCountKey());
             if (current >= config.monthlyLimit) {
-                throw new SendMailLimitError(msgs.ServerSendMailMonthlyLimitMsg);
+                throw new SendMailLimitError('monthly', msgs.ServerSendMailMonthlyLimitMsg);
             }
         }
     } catch (error) {

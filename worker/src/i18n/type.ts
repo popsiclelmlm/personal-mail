@@ -82,6 +82,7 @@ export type LocaleMessages = {
     EnableResendOrSmtpOrSendMailMsg: string
     ServerSendMailDailyLimitMsg: string
     ServerSendMailMonthlyLimitMsg: string
+    SendMailRateLimitedMsg: string
     InvalidToMailMsg: string
 
     // Admin related

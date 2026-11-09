@@ -82,8 +82,9 @@ const messages: LocaleMessages = {
     AlreadyRequestedMsg: "已经申请过了",
     EnableResendOrSmtpMsg: "请先为此域名启用 resend 或 smtp",
     EnableResendOrSmtpOrSendMailMsg: "请先为此域名启用 resend、smtp 或 SEND_MAIL",
-    ServerSendMailDailyLimitMsg: "服务器今日发信次数已达上限",
-    ServerSendMailMonthlyLimitMsg: "服务器本月发信次数已达上限",
+    ServerSendMailDailyLimitMsg: "今天的发信额度已用完，请明天再试",
+    ServerSendMailMonthlyLimitMsg: "本月的发信额度已用完，请下个月再试，或联系管理员",
+    SendMailRateLimitedMsg: "发信太频繁了，请稍等几秒再试",
     InvalidToMailMsg: "收件人地址无效",
 
     // Admin related

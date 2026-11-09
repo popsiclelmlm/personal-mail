@@ -11,6 +11,7 @@ import { GeoData } from '../models'
 import { handleListQuery, isSendMailBindingEnabled, updateAddressUpdatedAt } from '../common'
 import { getSendBalanceState, requestSendMailAccess } from './send_balance';
 import { ensureSendMailLimit, increaseSendMailLimitCount } from './send_mail_limit_utils';
+import { SendQuotaError, resendQuotaKind, sendQuotaMessage } from './send_quota_error';
 
 
 export const api = new Hono<HonoCustomType>()
@@ -97,6 +98,12 @@ const sendMailByResend = async (
         })
     });
     if (error) {
+        // 额度用完或发得太快：换成给用户看的提示，调用方返回 429
+        const quotaKind = resendQuotaKind(error.name);
+        if (quotaKind) {
+            console.warn(`Resend quota error: ${error.name} ${error.message}`);
+            throw new SendQuotaError(quotaKind, sendQuotaMessage(quotaKind, i18n.getMessagesbyContext(c)));
+        }
         throw new Error(`Resend error: ${error.name} ${error.message}`);
     }
     console.log(`Resend success: ${JSON.stringify(data)}`);
@@ -255,6 +262,8 @@ api.post('/api/send_mail', async (c) => {
         await sendMail(c, address, reqJson);
     } catch (e) {
         console.error("Failed to send mail", e);
+        // 额度用完或发得太快：直接给出友好提示
+        if (e instanceof SendQuotaError) return c.text(e.message, 429);
         return c.text(`Failed to send mail ${(e as Error).message}`, 400)
     }
     return c.json({ status: "ok" })
@@ -270,6 +279,8 @@ api.post('/external/api/send_mail', async (c) => {
         return c.json({ status: "ok" })
     } catch (e) {
         console.error("Failed to send mail", e);
+        // 额度用完或发得太快：直接给出友好提示
+        if (e instanceof SendQuotaError) return c.text(e.message, 429);
         return c.text(`Failed to send mail ${(e as Error).message}`, 400)
     }
 })
