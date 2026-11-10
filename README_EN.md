@@ -63,7 +63,7 @@ Built on [cloudflare_temp_email](https://github.com/dreamhunter2333/cloudflare_t
 
 ### Security issues that also affect upstream
 
-While building this project we found and fixed several frontend security issues that also affect upstream, mostly in how mail content is rendered. Upstream has no private reporting channel yet, so we asked the maintainer for one in [#1203](https://github.com/dreamhunter2333/cloudflare_temp_email/issues/1203) and will report privately once it is available. To avoid exposing sites that still run the upstream version, details will be added here after upstream releases a fix. To report a problem in this project, see [SECURITY.md](SECURITY.md).
+While building this project we found and fixed several frontend security issues that also affect upstream, mostly in how mail content is rendered. We reported them to the upstream maintainer through GitHub private vulnerability reporting (after asking for a private channel in [#1203](https://github.com/dreamhunter2333/cloudflare_temp_email/issues/1203)). To avoid exposing sites that still run the upstream version, details will be added here after upstream releases a fix. To report a problem in this project, see [SECURITY.md](SECURITY.md).
 
 ### Experience
 
